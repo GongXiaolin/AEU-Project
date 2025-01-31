@@ -1,0 +1,3441 @@
+**
+
+范围做到7.3单态处理，仅供参考。
+**
+
+theory xxxxxxxxxxxxxxxxxx
+imports Main Basics Record_def Peep
+begin
+ML{*
+datatype token = Ident of string
+| Number of int
+| Delim of string
+| Keyword of string
+|Note of string
+*}
+
+ML{*
+exception FAIL of string option;(*used to output a wrong information *)
+}
+ML{
+(raise FAIL NONE)
+
+fun one P = getM: |–(fn xs => if xs = [] then (raise FAIL NONE)
+else if P (hd xs) then (setM (tl xs)|-- returnM (hd xs))
+else (raise FAIL NONE))
+val one1 = one (fn x => x = #“a” ) ([#“a”])
+}
+ML{
+fun (scan1 || scan2) xs = scan1 xs handle FAIL_ => scan2 xs
+}
+ML{
+val digit = one (fn c => c= #“0”) ||
+one (fn c => c= #“1”) ||
+one (fn c => c= #“2”) ||
+one (fn c => c= #“3”) ||
+one (fn c => c= #“4”) ||
+one (fn c => c= #“5”) ||
+one (fn c => c= #“6”) ||
+one (fn c => c= #“7”) ||
+one (fn c => c= #“8”) ||
+one (fn c => c= #“9”)
+*}
+
+ML{*
+val low_letter =one (fn c => c= #“a”) ||
+one (fn c => c= #“b”) ||
+one (fn c => c= #“c”) ||
+one (fn c => c= #“d”) ||
+one (fn c => c= #“e”) ||
+one (fn c => c= #“f”) ||
+one (fn c => c= #“g”) ||
+one (fn c => c= #“h”) ||
+one (fn c => c= #“i”) ||
+one (fn c => c= #“j”) ||
+one (fn c => c= #“k”) ||
+one (fn c => c= #“l”) ||
+one (fn c => c= #“m”) ||
+one (fn c => c= #“n”) ||
+one (fn c => c= #“o”) ||
+one (fn c => c= #“p”) ||
+one (fn c => c= #“q”) ||
+one (fn c => c= #“r”) ||
+one (fn c => c= #“s”) ||
+one (fn c => c= #“t”) ||
+one (fn c => c= #“u”) ||
+one (fn c => c= #“v”) ||
+one (fn c => c= #“w”) ||
+one (fn c => c= #“x”) ||
+one (fn c => c= #“y”) ||
+one (fn c => c= #“z”)
+
+*}
+
+ML{*
+val up_letter =one (fn c => c= #“A”) ||
+one (fn c => c= #“B”) ||
+one (fn c => c= #“C”) ||
+one (fn c => c= #“D”) ||
+one (fn c => c= #“E”) ||
+one (fn c => c= #“F”) ||
+one (fn c => c= #“G”) ||
+one (fn c => c= #“H”) ||
+one (fn c => c= #“I”) ||
+one (fn c => c= #“J”) ||
+one (fn c => c= #“K”) ||
+one (fn c => c= #“L”) ||
+one (fn c => c= #“M”) ||
+one (fn c => c= #“N”) ||
+one (fn c => c= #“O”) ||
+one (fn c => c= #“P”) ||
+one (fn c => c= #“Q”) ||
+one (fn c => c= #“R”) ||
+one (fn c => c= #“S”) ||
+one (fn c => c= #“T”) ||
+one (fn c => c= #“U”) ||
+one (fn c => c= #“V”) ||
+one (fn c => c= #“W”) ||
+one (fn c => c= #“X”) ||
+one (fn c => c= #“Y”) ||
+one (fn c => c= #“Z”)
+
+*}
+
+ML{*
+val letter = low_letter || up_letter
+*}
+
+ML{*
+fun option scan = (scan >>SOME) || returnM NONE
+fun repeat scan = option scan : |-- (fn NONE => returnM []
+|SOME tk => repeat scan >> (fn tks => tk :: tks))
+}
+ML{
+val number = (digit – repeat digit) >>
+(fn (c,cs) => (c::cs) |> String.implode |> Int.fromString |> the |>Number)
+}
+ML{
+val ident = ((letter || (one (fn c => c = #""))) – repeat (letter ||digit||(one (fn c => c = #"")))) >>
+(fn (c,cs) => Ident (String.implode (c::cs)))
+val c = ident [#“a”,#"_"]
+}
+ML{
+val keywords = [“if”,“then”,“else”,“do”,“while”,“for”,“andalso”,“orelse”,“true”,“false”,“not”]
+*}
+
+ML{*
+val keyword = ident : |-- (fn Ident n => if (member n keywords) then returnM (Keyword n) else raise FAIL NONE)
+val c =keyword [#“w”,#“h”,#“i”,#“l”,#“e”]
+
+}
+ML{
+val delims = [">","=","<","(",")","{","}","[","]",">=","<=",":",";","+","-","*","/","%","++","~","<>","&&","||","=="]
+
+val delim = getM : |-- (fn [] => raise FAIL NONE
+|(x::[]) => if Char.isPunct x andalso (member ([x]|>String.implode) delims)then setM [] |-- returnM (Delim ( [x] |>String.implode)) else raise FAIL NONE
+| (x::y::xs) => if Char.isPunct x andalso Char.isPunct y andalso (member ([x,y]|>String.implode) delims) then setM xs |-- returnM( Delim([x,y]|>String.implode) )
+else if Char.isPunct x andalso (member ([x]|>String.implode) delims)then setM (y::xs) |-- returnM(Delim (([x] |>String.implode)))
+else raise FAIL NONE
+
+)
+
+}
+ML{
+
+val non_space = (keyword||number||ident||delim)
+val space = repeat (one (fn n=> Char.isSpace n) )
+val d = space [#" "]
+val lexer =space|–(repeat (non_space --|space))
+fun tokens_of src =src |> String.explode |> lexer |>fst
+}
+ML{
+val sor = " (123 456fdsff) <++>=s=10;i=1;while (123 456fdsff) (i<=10){s=s++;i=i+1;i=i++;} "
+}
+ML{
+val c = sor |> String.explode
+val (a,d) = c |> lexer
+
+}
+ML{
+val delm = one Char.isPunct
+
+val d = Char.isSpace #"\n"
+
+val deli = repeat (one Char.isPunct) >> (fn n => if (member (n|>String.implode) delims) then n|>String.implode|>Delim else raise FAIL NONE)
+val delo = repeat (one (fn n=> member ([n] |> String.implode) delims))
+
+val delim2 = ((delm–delm)>>(fn (x,y) => if member ([x,y]|>String.implode) delims then [x,y]|>String.implode|> Delim else raise FAIL NONE))
+||((delm–((returnM (#" “)))>>(fn (x,#” “) => if member ([x]|>String.implode) delims then [x]|>String.implode|> Delim else raise FAIL NONE)))
+val c =delim2 [#”+",#"+",#";"]
+}
+(======)
+ML{
+val note1 = (one(fn n=> n= #"(") )
+val note11 = (one(fn n=> n= #"*") )
+*}
+
+ML{*
+val note2 = ( one (fn n => n= #")"))
+
+*}
+
+ML{*
+val nx = one (fn n=> n<> #"*")
+val note = (note1–note11–repeat(nx)–note11–note2)>>(fn ((((x,y),xs),z),q) => Note (String.implode (xs)) )
+}
+ML{
+val non_space = (note||keyword||number||ident||delim)
+val space = repeat (one (fn n=> Char.isSpace n) )
+val d = space [#" "]
+val lexer =space|–(repeat (non_space --|space))
+fun tokens_of src =src |> String.explode |> lexer |>fst
+*}
+
+ML{*
+val c = sor |> String.explode
+val (a,d) = c |> lexer
+}
+ML{
+val notes = one (fn c => c = #"")
+val note1 = one (fn c => c = #"(")
+val note2 = one (fn c => c = #")")
+val text = one (fn c => c <> #"")
+val n1 = ((note1 – notes) |-- repeat(text))
+val n2 = (notes – note2)
+val note = (n1 --| n2) >> (fn xs => Note (String.implode xs))
+val a = note [#"(",#"",#".",#“a”,#“9”,#"",#")"]
+
+}
+ML{
+((Char.isAlphaNum||Char.isPunct||Char.isSpace );)
+
+val end’ = getM : |-- (fn xs => if (hd xs) = #"" andalso (last (take 2 xs)) = #")"
+then (raise FAIL NONE)
+else (setM( tl xs)) |-- returnM (hd xs ))
+val add’ = getM : |-- (fn xs => if (hd xs) = #"(" andalso (last (take 2 xs)) = #""
+then ((setM (drop 2 xs))|–(( repeat end’)))
+else raise FAIL NONE)
+val adds = (add’: |–(fn n => returnM( Note(String.implode n)))) --| (getM : |-- (fn xs => setM (drop 2 xs)))
+
+val a = fst ([#"(",#"",#“b”,#" “,#“2”,#”",#")",#“e”] |> adds)
+}
+ML{
+val c =drop 2 [#"*", #")", #“e”]
+}
+ML{
+fun foldr f e [] = e
+|foldr f e (x::xs) = f (x, (foldr f e xs))
+}
+ML{
+fun yunhanright xs = foldr (fn (x,v)=>((not v) orelse x)) (true) xs
+val c = yunhanright [false,true,true,false]
+
+*}
+
+ML{*
+fun yunhanleft xs = foldr (fn (x,v)=> ( (not x) orelse v)) (true) (xs)
+val d = yunhanleft [true,true,false,false]
+*}
+
+ML{*
+
+*}
+
+ML{*
+
+*}
+
+ML{*
+
+*}
+
+ML{*
+
+}
+ML{
+datatype exp = Const of int
+| Var of string
+| Add of exp * exp
+| Minus of exp * exp
+| Mult of exp * exp
+| Div of exp * exp
+| Neg of exp
+|True
+|False
+|Lt of exp * exp
+|Le of exp * exp
+|Gt of exp * exp
+|Ge of exp * exp
+|Eq of exp * exp
+|Neq of exp * exp
+|Not of exp
+|And of exp * exp
+|Or of exp * exp
+| Asgn of string * exp
+| Seq of exp *exp
+| While of exp * exp
+| Ift of exp * exp
+| Ife of exp * exp * exp
+| Return of (exp option)
+| Scall of (string * exp list)
+| Ecall of (string * exp list)
+| Block of ((string list) * exp)
+| Fdecl of ((string * (string list)) * exp)
+| Prog of exp list
+*}
+
+ML{*
+fun is_lb (Delim “(”) = true
+|is_lb _ = false
+fun is_rb (Delim “)”) = true
+|is_rb _ = false
+}
+ML{
+val Const_exp = one(fn Number n => true)>> (fn Number n => Const n)
+val var_exp = one(fn Ident n => true)>> (fn Ident n => Var n)
+
+fun is_neg (Delim “~”) = true
+|is_neg _ = false
+}
+ML{
+val mult_or_div =( one (fn n => n = Delim “")
+|| one (fn n => n = Delim “/”))
+val add_or_minus= one (fn n => n = Delim “+”)
+|| one (fn n => n = Delim “-”)
+fun is_neg (Delim “~”) = true
+|is_neg _ = false
+fun foldl f e xs = foldr f e (rev xs)
+}
+ML{
+fun factor x = ( (one is_lb|-- aexp–| one is_rb)||
+( Const_exp)||
+( var_exp)||
+one is_neg |-- factor>> Neg
+) x
+and term x = (factor --(repeat (mult_or_div – factor))>>
+(fn (e, op_fcts) => foldl (fn ((Delim "” , e2), e1) => Mult (e1, e2)
+| ((Delim “/” , e2), e1)=> Div (e1, e2)) e op_fcts)) x
+and aexp x = (term --(repeat (add_or_minus – term)) >>
+(fn (e, op_trms) => foldl (fn ((Delim “+” , e2), e1) => Add (e1, e2)
+| ((Delim “-” , e2), e1) => Minus (e1, e2)) e op_trms)) x
+}
+ML{
+
+val sor = “x + 2 * y - ~z + (i - 2 * j)”
+}
+ML{
+val c = sor |> String.explode
+val (a) = c |> lexer |> fst |> aexp |>fst
+
+*}
+
+ML{*
+val totrue = one(fn Keyword “true” => true ) >> (fn n => True)
+val tofalse = one(fn Keyword “false” => true) >> (fn n => False)
+val cop = one (fn n => n = Delim “<”)
+||one (fn n => n = Delim “<=”)
+||one (fn n => n = Delim “>”)
+||one (fn n => n = Delim “>=”)
+||one (fn n => n = Delim “==”)
+||one (fn n => n = Delim “<>”)
+fun tonot (Keyword “not”) = true
+|tonot _ = false
+}
+ML{
+fun bfactor x =((totrue) || (tofalse)
+
+          ||(( aexp -- cop -- aexp)>>
+                                     (
+                                       fn ((a,Delim "<"),b) => Lt (a,b)
+                                      |  ((a,Delim "<="),b) => Le (a,b)
+                                      |  ((a,Delim ">"),b) => Gt (a,b)
+                                      |  ((a,Delim ">="),b) => Ge (a,b)
+                                      |  ((a,Delim "=="),b) => Eq (a,b)
+                                      |  ((a,Delim "<>"),b) => Neq (a,b)
+                                       ))
+         
+            || aexp 
+             || ( (one is_lb |-- bexp --| one is_rb))
+            || (((one tonot) |-- bfactor) >> (fn n =>Not n))
+          ) x
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+and bterm x = ((bfactor – repeat ((one(fn n => n =Delim “&&”))-- bfactor))
+>>(fn (e,ops) => foldl (fn ((Delim “&&”,e2),e1) => And (e1,e2)) e ops ))x
+
+and bexp x = ((bterm – repeat ((one(fn n => n=Delim “||”))–bterm)) >>
+(fn (e,ops) => foldl (fn ((Delim “||”,e2),e1) => Or (e1,e2)) e ops)) x
+}
+ML{
+val c = “( false && (1+2 > 1)) && ( not true) && ((1+3)>2)&&(1>=2) ||(3<4)”
+
+val d = “(x+y) && true” |> String.explode
+val d = “true && (x+y)” |> String.explode
+
+}
+ML{
+
+}
+ML{
+val d = "not 2+true " |> String.explode
+val (a) = d |> lexer |> fst |>( bexp)
+}
+ML{
+val f = “1”
+val e = c |> String.explode
+val g = f|>String.explode |> lexer |> fst |> bexp
+*}
+
+ML{*
+datatype value = Num of int
+| Bool of bool
+| Noval
+
+}
+ML{
+fun tb_lookup v (x::xs) = ( (if (fst x) = v then snd x else tb_lookup v (xs) ))
+val c = tb_lookup 2 [(1,Num 3),(2,Num 4)]
+}
+ML{
+(* Arithmetic Expression )
+fun E (Const i) = returnM (Num i)
+| E (Var v) = getM : |-- (fn store => returnM (tb_lookup v store))
+| E (Add (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Num (i1 + i2))
+| E (Minus (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Num (i1 - i2))
+| E (Mult (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Num (i1 * i2))
+| E (Div (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Num (i1 div i2))
+| E (Neg e) = E e >> (fn (Num i) => Num (~i))
+( Boolean Expression *)
+| E True = returnM (Bool true)
+| E False = returnM (Bool false)
+| E (Lt (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 < i2))
+| E (Le (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 < i2))
+| E (Gt (e1, e2)) =( E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 > i2))
+| E (Ge (e1, e2)) =( E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 >= i2))
+| E (Eq (e1, e2)) = (E e1 – E e2) >> (fn (Num i1, Num i2) => Bool (i1 = i2))
+| E (Neq (e1, e2)) =( E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 <> i2))
+| E (Not e) = E e >> (fn (Bool b) => Bool (not b))
+| E (And (e1, e2)) =( E e1-- E e2) >> (fn (Bool b1, Bool b2) => Bool (b1 andalso b2))
+| E (Or (e1, e2)) =( E e1-- E e2) >> (fn (Bool b1, Bool b2) => Bool (b1 orelse b2))
+
+}
+ML{
+val c = “( false && (1+2 > 1)) && ( not true) && (1>2)||(1>2) ||(3<4)”
+val d = (c |> String.explode |> lexer |>fst |> bexp |>fst |>E) ([])
+val e = “3+2”
+val d = (e |> String.explode |> lexer |>fst |> bexp |>fst |>E) ([])
+*}
+
+ML{*
+fun eval string store = (string |> String.explode |> lexer |>fst |> bexp |>fst |>E ) store
+val c = eval “( false && (1+2 > 1)) && ( not true) && (1>2)||(1>2) ||(3<4)” []
+(val c = eval “x && true” [(“x”,Num 5)])
+val c = eval “x” [(“x”,Num 5)]
+*}
+
+ML{*
+datatype TE = Tvar of int
+| Tnum
+| Tbool
+| Tfun of (TE list * TE)
+| Noty
+*}
+
+ML{*
+val s = “state”
+val v = [(“curvar”,“int”),(“vars”,"(string * TE)list"),(“eqns”,"(TE * TE) list")]
+val _ = record_defs ["'a"] s v
+}
+ML{
+fun make_tvarM v = (get_varsM–get_curvarM): |–(fn (vars,curvar)=>(set_varsM ((v,Tvar curvar)::vars))|-- set_curvarM (curvar+1)|-- returnM (Tvar curvar))
+}
+ML{
+fun tb_defined v vars = if member v (fst (unzip vars)) then true else false
+val c = tb_defined 3 [(1,2),(2,3),(3,4)]
+}
+ML{
+fun tb_lookup v vars = snd(hd(filter(fn n =>(fst n) = v ) vars ))
+val c = tb_lookup 3 [(3,4),(2,8)]
+}
+ML{
+fun tb_lookup v ((m,n)::xs)= if v = m then n else tb_lookup v xs
+}
+ML{
+fun varM v = get_varsM : |-- (fn vars => if (tb_defined v vars) then returnM (tb_lookup v vars)
+else make_tvarM v)
+}
+ML{
+fun eqnM (t1, t2) = get_eqnsM : |-- (fn eqns => set_eqnsM ((t1,t2)::eqns))
+}
+ML{
+fun E (Const n) = returnM (Tnum)
+|E (Var n) = varM (n)
+|E (True) = returnM (Tbool)
+|E (False) = returnM (Tbool)
+|E (Add (e1,e2)) = (E e1 – E e2): |-- (fn (t1,t2) => eqnM (t1,Tnum) |-- eqnM (t2,Tnum) |-- returnM(Tnum))
+|E(Minus(e1,e2)) = (E e1 – E e2): |–(fn (t1,t2)=> eqnM(t1,Tnum)|–eqnM(t2,Tnum)|–returnM (Tnum))
+|E(Mult (e1,e2)) = (E e1 – E e2): |-- (fn (t1,t2) => eqnM(t1,Tnum)|–eqnM(t2,Tnum)|–returnM (Tnum))
+|E(Div (e1,e2)) = (E e1 – E e2): |-- (fn (t1,t2) => eqnM(t1,Tnum)|–eqnM(t2,Tnum)|–returnM (Tnum))
+|E(Neg e) = (E e): |-- (fn t => eqnM (t,Tnum)|–returnM(Tnum))
+|E (And (e1,e2)) = (E e1 – E e2): |-- (fn (t1,t2) => eqnM (t1,Tbool) |-- eqnM (t2,Tbool) |-- returnM(Tbool))
+|E (Or (e1,e2)) = (E e1 – E e2): |-- (fn (t1,t2) => eqnM (t1,Tbool) |-- eqnM (t2,Tbool) |-- returnM(Tbool))
+|E(Not e) = (E e): |-- (fn t => eqnM (t,Tbool)|–returnM(Tbool))
+|E (Lt (e1,e2)) = (E e1 – E e2): |-- (fn (t1,t2) => eqnM (t1,Tnum) |-- eqnM (t2,Tnum) |-- returnM(Tbool))
+|E (Le (e1,e2)) = (E e1 – E e2): |-- (fn (t1,t2) => eqnM (t1,Tnum) |-- eqnM (t2,Tnum) |-- returnM(Tbool))
+|E (Ge (e1,e2)) = (E e1 – E e2): |-- (fn (t1,t2) => eqnM (t1,Tnum) |-- eqnM (t2,Tnum) |-- returnM(Tbool))
+|E (Gt (e1,e2)) = (E e1 – E e2): |-- (fn (t1,t2) => eqnM (t1,Tnum) |-- eqnM (t2,Tnum) |-- returnM(Tbool))
+|E (Eq (e1,e2)) = (E e1 – E e2): |-- (fn (t1,t2) => eqnM (t1,Tnum) |-- eqnM (t2,Tnum) |-- returnM(Tbool))
+|E (Neq (e1,e2)) = (E e1 – E e2): |-- (fn (t1,t2) => eqnM (t1,Tnum) |-- eqnM (t2,Tnum) |-- returnM(Tbool))
+
+}
+ML{
+val (result_T, state {vars, eqns, …}) =
+( “(x + y) && 20” |>tokens_of |>bexp |> fst |> E)
+(state {vars = [], eqns = [], curvar = 0})
+*}
+
+ML{*
+fun chaseM (t as Tvar _) = getM : |-- (fn tenv =>
+if (tb_defined t tenv) then chaseM (tb_lookup t tenv) else returnM t)
+| chaseM t = returnM t
+*}
+
+ML{*
+exception TypeError of (TE * TE)😭*used to output a wrong information *)
+}
+ML{
+val unifyM = (fn (t,u)=>(if t = u then returnM () else (
+getM : |-- (fn (tenv)=> case (t,u) of
+(t,Tvar _) => setM ((u,t)::tenv)
+|(Tvar ,u)=> setM ((t,u)::tenv)
+| => raise TypeError (t, u) ))))
+
+}
+ML{
+val c = unifyM (Tnum,Tbool) []
+}
+ML{
+fun solve eqns =
+(eqns |> map (fn (t, u) => ((chaseM t)-- (chaseM u) ) : |-- unifyM) |> listM) [] |> snd
+}
+ML{
+fun typing source =
+let
+val (result_T, state {vars, eqns, …}) =
+(source |> tokens_of |> bexp |> fst |> E)
+(state {vars = [], eqns = [], curvar = 0})
+val tenv = solve eqns
+val result_type = chaseM result_T tenv |> fst
+val types = vars |> map (fn (v, vt) => (v, chaseM vt tenv |> fst))
+in
+(result_type, types)
+end
+val d = ("(x+y)&&true"|> String.explode |> lexer |> fst |>bexp |>fst |> E) (state {vars = [], eqns = [], curvar = 0})
+(val d = typing (“true && false”))*}
+
+ML{*
+val state_type = “tstate”
+val vars = [ ( “curvar” , “int” ),
+( “vars” , “(string * TE) list” ),
+( “eqns” , "((exp*int) * (TE * TE)) list " ),
+( “step” , “exp” ),
+(“seeking”,“int”),
+(“num”,“int”)]
+val _ = record_defs [] state_type vars
+}
+ML{
+fun preM e =( get_numM: |-- (fn i => set_numM (i+1)) |-- set_stepM e)
+}
+ML{
+fun eqnM ((e1,e2),(v,i)) =( get_eqnsM) : |-- (fn (eqns) => set_eqnsM (((v,i),(e1,e2))::eqns))
+}
+ML{
+fun tb_defined v vars = if member v (fst (unzip vars)) then true else false
+val c = tb_defined 3 [(1,2),(2,3),(3,4)]
+}
+ML{
+fun tb_lookup v vars = snd(hd(filter(fn n =>(fst n) = v ) vars ))
+val c = tb_lookup 3 [(3,4),(2,8)]
+}
+ML{
+fun make_tvarM v = (get_varsM–get_curvarM): |–(fn (vars,curvar)=>(set_varsM ((v,Tvar curvar)::vars))|-- set_curvarM (curvar+1)|-- returnM (Tvar curvar))
+}
+ML{
+fun varM v = get_varsM : |-- (fn vars =>
+if (tb_defined v vars) then returnM (tb_lookup v vars)
+else make_tvarM v)
+}
+ML{
+
+fun E e =
+preM e |–(get_stepM–get_numM) : |–(fn (step,num) =>
+case e of
+Const i => returnM Tnum
+| Var v => varM v
+| Add (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tnum)
+| Minus (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tnum)
+| Mult (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tnum)
+| Div (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tnum)
+| Neg e => E e : |-- (fn t => eqnM ((t,Tnum),(step,num)) |-- returnM Tnum)
+| True => returnM Tbool
+| False => returnM Tbool
+| Lt (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Le (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Gt (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Ge (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Eq (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Neq (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Not e => E e : |-- (fn t => eqnM ((t,Tbool),(step,num))|-- returnM Tbool)
+| And (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tbool),(step,num)) |-- eqnM ((t2 , Tbool),(step,num)) |-- returnM Tbool)
+| Or (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tbool),(step,num)) |-- eqnM ((t2 , Tbool),(step,num)) |-- returnM Tbool)
+)
+
+}
+ML{
+fun chaseM (t as Tvar _) = getM : |-- (fn tenv =>
+if (tb_defined t tenv) then chaseM (tb_lookup t tenv) else returnM t)
+| chaseM t = returnM t
+}
+ML{
+exception TypeError of ((exp*int) * (TE * TE))😭*used to output a wrong information *)
+}
+ML{
+fun unifyM (step,(t,u)) = if t = u then returnM () else (
+getM : |-- (fn tenv =>
+case (t, u) of
+(Tvar _, u) => setM ((t, u)::tenv)
+| (t, Tvar _) => setM ((u, t)::tenv)
+| _ => raise TypeError (step,(t, u)) ))
+}
+ML{
+val c = ("(x+y) && true"|>String.explode |> lexer |> fst |>bexp |>fst |> E ) (tstate {curvar=0,vars=[],eqns=[],step = Const 0,num=0,seeking=0})
+}
+ML{
+fun solve eqns =
+(eqns |> map (fn (v,(t, u)) => (((chaseM t)-- (chaseM u)) ) : |–(fn (m,n) => unifyM (v,(m,n)))) |> listM) [] |> snd
+}
+ML{
+fun typing source =
+let
+val (result_T, tstate {vars, eqns, …}) =
+(source |> tokens_of |> bexp |> fst |> E)
+(tstate {vars = [], eqns = [], curvar = 0,step=Const 0,num=0,seeking=0})
+val tenv = solve eqns
+val result_type = chaseM result_T tenv |> fst
+val types = vars |> map (fn (v, vt) => (v, chaseM vt tenv |> fst))
+in
+(result_type, types)
+end
+
+}
+ML{
+val c = typing “(2 && false) && true”
+}
+ML{
+val d = typing “(x+y)*z”
+}
+ML{
+val c = ("(2 && false) && true" |> tokens_of |> bexp |> fst |> E)
+(tstate {vars = [], eqns = [], curvar = 0,step=Const 0,num=0,seeking = 0})
+val c =typing “(2 && false) && true”
+*}
+
+ML{*
+fun preM e =( get_numM: |-- (fn i => set_numM (i+1)) )
+}
+ML {
+local
+open Pretty
+in
+fun mark_red p = mark Markup.improper p
+val str = str
+val writeln = writeln
+end
+}
+ML{
+val st = str “123”
+val c = mark_red st
+*}
+
+ML{*
+val be = @{qsource <open>123<close>}
+val ae = @{qsource <open> <close>}
+val c = string_of_int 123
+}
+ML{
+fun is_add (Add _) = true
+|is_add _ = false
+fun is_minus (Minus _) = true
+|is_minus _ = false
+fun is_div (Div _) = true
+|is_div _ = false
+fun is_mult (Mult _) = true
+|is_mult _ = false
+fun is_and (And _) = true
+|is_and _ = false
+fun is_or (Or _) = true
+|is_or _ = false
+fun is_lt (Lt _) = true
+|is_lt _ = false
+fun is_le (Le _) = true
+|is_le _ = false
+fun is_ge (Ge _) = true
+|is_ge _ = false
+fun is_gt (Gt _) = true
+|is_gt _ = false
+fun is_eq (Eq _) = true
+|is_eq _ = false
+fun is_neq (Neq _) = true
+|is_neq _ = false
+fun bracket bc p = if bc = true then @{qsource <open>(@{p} )<close>} else p
+fun ptr_bopM ope (a,b) =returnM ( @{qsource <open>@{a}@{str ope}@{b}<close>})
+fun ptr_opM ope p = returnM (@{qsource <open>@{str ope}@{p}<close>})
+val c = ptr_bopM “/” ((mark_red (str “bvb”)),(str “dfg”)) [] |> fst
+val d = ptr_bopM “/” (str"a",c) []
+fun postM step = (fn e => (get_seekingM : |-- (fn step’ => if (step = step’) then returnM (mark_red e) else returnM (e))))
+
+*}
+
+ML{*
+local
+fun E e = (preM e |-- get_numM) : |-- (fn step =>
+( case e of
+Const i => returnM (str(string_of_int i))
+| Var v => returnM (str v)
+| Add (e1,e2) => (E e1 – E e2) : |-- (fn (t1,t2) => (
+ptr_bopM “+” (bracket false t1, bracket false t2)
+))
+| Minus (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) => (
+ptr_bopM “-” (bracket false t1, bracket false t2)
+))
+
+| Mult (e1,e2) => E e1 -- E e2 : |--(fn (t1,t2) => (
+     let
+          val lbc = is_add e1 orelse is_minus e1
+          val rbc = is_add e2 orelse is_minus e2 orelse is_div e2
+     in
+          ptr_bopM "*" (bracket lbc t1, bracket rbc t2)
+     end
+     ))
+    
+| Div (e1,e2) => E e1 -- E e2 : |--(fn (t1,t2) => 
+    (
+     let
+          val lbc = is_add e1 orelse is_minus e1
+          val rbc = is_add e2 orelse is_minus e2 orelse is_div e2 orelse is_mult e2
+     in
+          ptr_bopM "/" (bracket lbc t1, bracket rbc t2)
+     end
+     ))
+| Neg e => E e : |-- (fn t => (
+      let
+          val bc = (is_add e orelse is_minus e orelse is_div e orelse is_mult e)
+      in 
+          ptr_opM "~" (bracket bc t)
+      end
+ ) )
+| True => returnM (str "ture")
+| False => returnM (str "false")
+| Lt (e1,e2) => E e1 -- E e2 : |--(fn (t1,t2) => (
+      let
+          val lbc = is_add e1 orelse is_minus e1 orelse is_mult e1 orelse is_div e1
+          val rbc = is_add e2 orelse is_minus e2 orelse is_mult e2 orelse is_div e2
+      in
+          ptr_bopM "<" (bracket lbc t1, bracket rbc t2)
+      end
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+))
+
+| Le (e1,e2) => E e1 -- E e2 : |--(fn (t1,t2) => 
+      (
+      let
+          val lbc = is_add e1 orelse is_minus e1 orelse is_mult e1 orelse is_div e1
+          val rbc = is_add e2 orelse is_minus e2 orelse is_mult e2 orelse is_div e2
+      in
+          ptr_bopM "<=" (bracket lbc t1, bracket rbc t2)
+      end
+1
+2
+3
+4
+5
+6
+7
+8
+))
+| Gt (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+(
+let
+val lbc = is_add e1 orelse is_minus e1 orelse is_mult e1 orelse is_div e1
+val rbc = is_add e2 orelse is_minus e2 orelse is_mult e2 orelse is_div e2
+in
+ptr_bopM “>” (bracket lbc t1, bracket rbc t2)
+end
+))
+| Ge (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+(
+let
+val lbc = is_add e1 orelse is_minus e1 orelse is_mult e1 orelse is_div e1
+val rbc = is_add e2 orelse is_minus e2 orelse is_mult e2 orelse is_div e2
+in
+ptr_bopM “>=” (bracket lbc t1, bracket rbc t2)
+end
+))
+| Eq (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+(
+let
+val lbc = is_add e1 orelse is_minus e1 orelse is_mult e1 orelse is_div e1
+val rbc = is_add e2 orelse is_minus e2 orelse is_mult e2 orelse is_div e2
+in
+ptr_bopM “==” (bracket lbc t1, bracket rbc t2)
+end
+))
+| Neq (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+(
+let
+val lbc = is_add e1 orelse is_minus e1 orelse is_mult e1 orelse is_div e1
+val rbc = is_add e2 orelse is_minus e2 orelse is_mult e2 orelse is_div e2
+in
+ptr_bopM “<>” (bracket lbc t1, bracket rbc t2)
+end
+))
+| Not e => E e : |-- (fn t => (
+let
+val bc = is_and e orelse is_or e orelse is_lt e orelse is_le e orelse is_gt e orelse is_ge e orelse is_eq e orelse is_neq e
+in
+ptr_opM "not " (bracket bc t)
+end
+))
+| And (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+let
+val lbc = is_or e1 orelse is_lt e1 orelse is_le e1 orelse is_gt e1 orelse is_ge e1 orelse is_eq e1 orelse is_neq e1
+val rbc = is_or e2 orelse is_lt e2 orelse is_le e2 orelse is_gt e2 orelse is_ge e2 orelse is_eq e2 orelse is_neq e2
+in
+ptr_bopM “&&” (bracket lbc t1, bracket rbc t2)
+end
+)
+| Or (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) => (
+let
+val lbc = is_lt e1 orelse is_le e1 orelse is_gt e1 orelse is_ge e1 orelse is_eq e1 orelse is_neq e1
+val rbc = is_lt e2 orelse is_le e2 orelse is_gt e2 orelse is_ge e2 orelse is_eq e2 orelse is_neq e2 orelse is_and e2 orelse is_or e2
+in
+ptr_bopM “||” (bracket lbc t1, bracket rbc t2)
+end
+)))
+: |-- (fn e => (get_seekingM : |-- (fn step’ => if (step = step’) then returnM (mark_red e) else returnM (e))))
+)
+in
+fun show num source =
+(source |> tokens_of |> bexp |> fst |> E)
+(tstate {vars = [], eqns = [], curvar = 0, seeking = ( num),step = (Const 1),num=0})
+|> fst |> writeln
+end
+
+}
+ML{
+val c = typing “(3) && true”
+}
+ML{
+exception TypeErrorn of (unit*(((exp*int) * (TE * TE))))😭*used to output a wrong information *)
+}
+ML{
+
+fun typing source =
+let
+val (result_T, tstate {vars, eqns, …}) =
+(source |> tokens_of |> bexp |> fst |> E)
+(tstate {vars = [], eqns = [], curvar = 0,step=Const 0,num=0,seeking = 0})
+val tenv = solve eqns handle TypeError (step,(t, u)) => ((raise TypeErrorn((show (snd step) source),((step,(t, u))))) handle TypeErrorn(_,((step,(t, u)))) => raise TypeError(step,(t, u)))
+val result_type = chaseM result_T tenv |> fst
+val types = vars |> map (fn (v, vt) => (v, chaseM vt tenv |> fst))
+in
+(result_type, types)
+end
+}
+ML{
+val c = typing “not (true && 3)”
+}
+ML{
+val c = typing " 4 && (3>4)"
+}
+ML{
+val c = typing “not 5”
+*}
+
+ML{*
+
+exception SyntaxError of string option;(*used to output a wrong information *)
+fun bexp_of str =
+let
+val (r,p) = str |> bexp
+in
+if p = [] then (r,p) else raise SyntaxError NONE
+end
+}
+ML{
+val is_end = one (fn n => n= Delim “;”)
+val is_if = one (fn n => n = Keyword “if”)
+val is_then = one (fn n=> n = Keyword “then”)
+val is_else = one (fn n=> n = Keyword “else”)
+val is_while = one (fn n=> n = Keyword “while”)
+fun is_ident (Ident _) = true
+|is_ident _ = false
+fun is_equ (Delim “=”) = true
+|is_equ _ = false
+fun is_LB (Delim “{”) = true
+|is_LB _ = false
+fun is_RB (Delim “}”) = true
+|is_RB _ = false
+val v = one (is_ident) ([Ident “c”])
+*}
+
+ML{*
+fun IFE x = ((((((is_if |-- bexp --|is_then) – ACMD) --|is_else) --ACMD ) ) >> (fn ((a,b),c)=> Ife (a,b,c))) x
+and IFT x = ((((is_if |-- bexp --| is_then) – ACMD) ) >> (fn (a,b) => Ift (a,b))) x
+and whilec x = ((((is_while |-- bexp )-- ACMD) ) >> (fn (a,b)=> While (a,b))) x
+and ASGN x = (((one (is_ident) --| (one (is_equ))) – bexp) >> (fn ((Ident a),b)=> Asgn (a,b))) x
+and ACMD x = (IFE || IFT
+|| whilec
+|| ASGN
+|| (one (is_LB)) |-- SEQ --| one (is_RB)) x
+(and SEQ x = (((ACMD – (repeat (is_end |-- ACMD))) >> ((fn (e,ops)=> (foldl (fn (e1,e2)=> Seq (e1,e2)) e ops)))
+)|| (ACMD >> (fn e => Seq(e,e) ))) x)
+and SEQ x = (((ACMD – (repeat (is_end |-- ACMD))) >> (fn (e,ops)=> if ops = [] then e else (foldl(fn (e1,e2)=> Seq (e1,e2)) (last ops) (rev(e::(but_last ops)))))) ) x
+}
+ML{
+val k = "if ((i <= 10) && (6 == 7) && (j >= 5)) then {s = 0} "|> String.explode |>lexer |>fst |>SEQ
+}
+ML{
+val d = "if ((i <= 10) && (6==7) && (j >= 5)) then {s = 0} "|> String.explode |>lexer |>fst |>SEQ
+}
+ML{
+
+}
+ML{
+val c =“s=0;i=1;if (s>2) then s=3 else s=s+1;while (i<3) {s=s+1;i=i+1}”|> String.explode |> lexer |> fst |>SEQ
+}
+ML{
+val c = [Ident “s”, Delim “=”, Number 0]|>SEQ
+val d = [Keyword “if”, Delim “(”, Ident “s”, Delim “>”,
+Number 2, Delim “)”, Keyword “then”, Ident “s”, Delim “=”, Number 3] |> SEQ
+}
+ML{
+val c= "not 2+true " |> String.explode |>lexer |> fst |> bexp
+}
+ML{
+val v = (((ACMD – (repeat (is_end |-- ACMD)))))
+val c = “s=0;i=1;if (s>2) then s=3 ;while (i<3) s=s+1”|> String.explode |> lexer |> fst |> v
+}
+ML{
+val d = “f(x,y)”|> String.explode |> lexer |> fst
+*}
+
+ML{*
+(* Arithmetic Expression )
+fun E (Const i) = returnM (Num i)
+| E (Var v) = getM : |-- (fn store => returnM (tb_lookup v store))
+| E (Add (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Num (i1 + i2))
+| E (Minus (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Num (i1 - i2))
+| E (Mult (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Num (i1 * i2))
+| E (Div (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Num (i1 div i2))
+| E (Neg e) = E e >> (fn (Num i) => Num (~i))
+( Boolean Expression *)
+| E True = returnM (Bool true)
+| E False = returnM (Bool false)
+| E (Lt (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 < i2))
+| E (Le (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 <= i2))
+| E (Gt (e1, e2)) =( E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 > i2))
+| E (Ge (e1, e2)) =( E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 >= i2))
+| E (Eq (e1, e2)) = (E e1 – E e2) >> (fn (Num i1, Num i2) => Bool (i1 = i2))
+| E (Neq (e1, e2)) =( E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 <> i2))
+| E (Not e) = E e >> (fn (Bool b) => Bool (not b))
+| E (And (e1, e2)) =( E e1-- E e2) >> (fn (Bool b1, Bool b2) => Bool (b1 andalso b2))
+| E (Or (e1, e2)) =( E e1-- E e2) >> (fn (Bool b1, Bool b2) => Bool (b1 orelse b2))
+(yuju Expression)
+| E (Ift (e1,e2)) = E e1 : |-- (fn n => if n = Bool true then E e2 else returnM Noval)
+| E (Ife (e1,e2,e3)) = E e1 : |-- ( fn n => if n = (Bool true) then E e2 else E e3)
+| E (While (e1,e2)) = (E e1 ) : |-- (fn (p1) => if p1 = (Bool false) then( returnM Noval) else E e2 |–(E (While (e1,e2))))
+| E (Asgn (e1,e2)) =(getM --( E e2)) : |-- (fn (store,n)=> if not (member e1 (fst (unzip store))) then setM ((e1,n)::store) else
+setM (map ( fn (a,b) => if a = e1 then (a,n) else (a,b)) store ) )|–returnM Noval
+|E (Seq (e1,e2)) = E e1 |-- E e2
+
+}
+ML{
+val c =(“s=0;i=1;if (s>2) then s=3 ;while (i<3) {s=s+1;i=i+1}”|> String.explode |> lexer |> fst |>SEQ |> fst |> E) []
+}
+ML{
+val d = (“s=0;if (s>2) then s=3”|> String.explode |> lexer |> fst |>SEQ |> fst |>E ) []
+}
+ML{
+val e = (“s=0;i=0;n=10;while (i<=n){ s=s+i;i=i+1}”|> String.explode |> lexer |> fst |>SEQ |> fst|> E ) []
+}
+ML{
+val f = (“s=0;if (s) then s = 3”|> String.explode |> lexer |> fst |>SEQ |> fst |>E ) []
+}
+ML{
+val d = (“s=0;i=0;c=true;d=false;if (c&&d) then s=5;else s=4”|> String.explode |> lexer |> fst |>SEQ |> fst |>E ) []
+*}
+
+ML{*
+val state_type = “tstate”
+val vars = [ ( “curvar” , “int” ),
+( “vars” , “(string * TE) list” ),
+( “eqns” , "((exp*int) * (TE * TE)) list " ),
+( “step” , “exp” ),
+(“seeking”,“int”),
+(“num”,“int”)]
+val _ = record_defs [] state_type vars
+*}
+
+ML{*(19)
+fun map P [] = []
+|map P (x::xs) = (P x) :: map P xs
+}
+ML{
+fun preM e =( get_numM: |-- (fn i => set_numM (i+1)) |-- set_stepM e)
+}
+ML{
+fun eqnM ((e1,e2),(v,i)) =( get_eqnsM) : |-- (fn (eqns) => set_eqnsM (((v,i),(e1,e2))::eqns))
+}
+ML{
+fun tb_defined v vars = if member v (fst (unzip vars)) then true else false
+val c = tb_defined 3 [(1,2),(2,3),(3,4)]
+}
+ML{
+fun tb_lookup v vars = snd(hd(filter(fn n =>(fst n) = v ) vars ))
+val c = tb_lookup 3 [(3,4),(2,8)]
+fun change (x,y) xs = if member x (fst (unzip xs )) then (x,y)::(filter (fn (a,b) => a<>x) xs) else xs@[(x,y)]
+val f = change (1,2) [(2,3),(1,4),(3,4)]
+}
+ML{
+fun make_tvarM v = (get_varsM–get_curvarM): |–(fn (vars,curvar)=>(set_varsM ( change (v,Tvar curvar) vars))|-- set_curvarM (curvar+1)|-- returnM (Tvar curvar))
+}
+ML{
+fun varM v = get_varsM : |-- (fn vars =>
+if (tb_defined v vars) then returnM (tb_lookup v vars)
+else make_tvarM v)
+
+}
+ML{
+
+fun E e =
+preM e |–(get_stepM–get_numM) : |–(fn (step,num) =>
+case e of
+Const i => returnM Tnum
+| Var v => varM v
+| Add (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tnum)
+| Minus (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tnum)
+| Mult (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tnum)
+| Div (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tnum)
+| Neg e => E e : |-- (fn t => eqnM ((t,Tnum),(step,num)) |-- returnM Tnum)
+| True => returnM Tbool
+| False => returnM Tbool
+| Lt (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Le (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Gt (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Ge (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Eq (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Neq (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Not e => E e : |-- (fn t => eqnM ((t,Tbool),(step,num))|-- returnM Tbool)
+| And (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tbool),(step,num)) |-- eqnM ((t2 , Tbool),(step,num)) |-- returnM Tbool)
+| Or (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tbool),(step,num)) |-- eqnM ((t2 , Tbool),(step,num)) |-- returnM Tbool)
+|Ift (e1,e2) =>(( E e1) : |-- (fn (t1) =>
+eqnM ((t1, Tbool),(step,num)) |-- E e2 |–returnM ( Tvar ~1)))
+|Ife (e1,e2,e3) => ((E e1) : |-- (fn (t1) => eqnM ((t1,Tbool),(step,num))|–E e2 |-- E e3 |-- returnM (Tvar ~1)))
+|While (e1,e2) => ((E e1 ) : |-- (fn (t1) => eqnM ((t1,Tbool),(step,num)) |-- returnM (Tvar ~1)))
+|Asgn (e1,e2) => get_curvarM: |–(fn n=> set_curvarM (n+1)) |–(E e2): |-- (fn t1 => (if t1 =Tnum then ((get_varsM: |–(fn var => set_varsM ( change (e1,Tnum) var)))) |–eqnM((t1,Tnum),(step,num)) else if t1 = Tbool then ((get_varsM: |–(fn var => set_varsM ( change (e1,Tbool) var)))) |–eqnM ((t1,Tbool),(step,num))else ((get_varsM: |–(fn var => set_varsM ( change (e1,t1) var)))|–eqnM ((t1,t1),(step,num))))|-- returnM (Tvar ~1))
+|Seq (e1,e2) => (E e1 |-- E e2)
+)
+
+}
+ML{
+fun chaseM (t as Tvar _) = getM : |-- (fn tenv =>
+if (tb_defined t tenv) then chaseM (tb_lookup t tenv) else returnM t)
+| chaseM t = returnM t
+}
+ML{
+exception TypeError of ((exp*int) * (TE * TE))😭*used to output a wrong information *)
+}
+ML{
+fun unifyM (step,(t,u)) = if t = u then returnM () else (
+getM : |-- (fn tenv =>
+case (t, u) of
+(Tvar _, u) => setM ((t, u)::tenv)
+| (t, Tvar _) => setM ((u, t)::tenv)
+| _ => raise TypeError (step,(t, u)) ))
+}
+ML{
+val c = ("(x+y) && true"|>String.explode |> lexer |> fst |>bexp |>fst |> E ) (tstate {curvar=0,vars=[],eqns=[],step = Const 0,num=0,seeking=0})
+}
+ML{
+fun solve eqns =
+(eqns |> map (fn (v,(t, u)) => (((chaseM t)-- (chaseM u)) ) : |–(fn (m,n) => unifyM (v,(m,n)))) |> listM) [] |> snd
+}
+ML{
+fun typing source =
+let
+val (result_T, tstate {vars, eqns, …}) =
+(source |> tokens_of |> SEQ |> fst |> E)
+(tstate {vars = [], eqns = [], curvar = 0,step=Const 0,num=0,seeking=0})
+val tenv = solve eqns
+
+val result_type = chaseM result_T tenv |> fst
+val types = vars |> map (fn (v, vt) => (v, chaseM vt tenv |> fst))
+
+in
+(result_type, vars)
+
+end
+
+}
+ML{
+val c = typing “v=(true && false) && true”
+}
+ML{
+val d = typing “i = u / ( x - (i + 20) * 5)”
+val c = “i = u / ( x - (i + 20) * 5)” |> tokens_of |> SEQ |> fst
+}
+ML{
+val e = ("(2 && false) && true" |> tokens_of |> bexp |> fst |> E)
+(tstate {vars = [], eqns = [], curvar = 0,step=Const 0,num=0,seeking = 0})
+*}
+ML{*val c =typing “v=(2 && false) && true”
+*}
+
+ML{*
+val d = typing “s=0;i=0;n=9;if (n<10) then {n = 10;k=1} else 1; while (i<=n) {s=s+i;i=i+1}”
+}
+ML{
+val e = “s=0;i=0;n=9;if (n<10) then {n = 10;k=1} ; while (i<1) {s=s+i;i=i+1}” |> String.explode |> lexer |> fst |>SEQ
+}
+ML{
+val f = typing “s=0;i=1;n=9;if (s) then {n = 10;k=1} ; while (i<1) {s=s+i;i=i+1}”
+}
+ML{
+val d = typing “s=0;i=0;n=9; if (true) then {n = 10;k=1} ; while (i) {s=s+i;i=i+1}”
+}
+ML{
+val d = typing “sum=0;i=0;N=True”
+*}
+
+ML{*
+local
+fun E e = (preM e |-- get_numM) : |-- (fn step =>
+( case e of
+Const i => returnM (str(string_of_int i))
+| Var v => returnM (str v)
+| Add (e1,e2) => (E e1 – E e2) : |-- (fn (t1,t2) => (
+ptr_bopM “+” (bracket false t1, bracket false t2)
+))
+| Minus (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) => (
+ptr_bopM “-” (bracket false t1, bracket false t2)
+))
+
+| Mult (e1,e2) => E e1 -- E e2 : |--(fn (t1,t2) => (
+     let
+          val lbc = is_add e1 orelse is_minus e1
+          val rbc = is_add e2 orelse is_minus e2 orelse is_div e2
+     in
+          ptr_bopM "*" (bracket lbc t1, bracket rbc t2)
+     end
+     ))
+    
+| Div (e1,e2) => E e1 -- E e2 : |--(fn (t1,t2) => 
+    (
+     let
+          val lbc = is_add e1 orelse is_minus e1
+          val rbc = is_add e2 orelse is_minus e2 orelse is_div e2 orelse is_mult e2
+     in
+          ptr_bopM "/" (bracket lbc t1, bracket rbc t2)
+     end
+     ))
+| Neg e => E e : |-- (fn t => (
+      let
+          val bc = (is_add e orelse is_minus e orelse is_div e orelse is_mult e)
+      in 
+          ptr_opM "~" (bracket bc t)
+      end
+ ) )
+| True => returnM (str "ture")
+| False => returnM (str "false")
+| Lt (e1,e2) => E e1 -- E e2 : |--(fn (t1,t2) => (
+      let
+          val lbc = is_add e1 orelse is_minus e1 orelse is_mult e1 orelse is_div e1
+          val rbc = is_add e2 orelse is_minus e2 orelse is_mult e2 orelse is_div e2
+      in
+          ptr_bopM "<" (bracket lbc t1, bracket rbc t2)
+      end
+
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+12
+13
+14
+15
+16
+17
+18
+19
+20
+21
+22
+23
+24
+25
+26
+27
+28
+29
+30
+31
+32
+33
+34
+))
+
+| Le (e1,e2) => E e1 -- E e2 : |--(fn (t1,t2) => 
+      (
+      let
+          val lbc = is_add e1 orelse is_minus e1 orelse is_mult e1 orelse is_div e1
+          val rbc = is_add e2 orelse is_minus e2 orelse is_mult e2 orelse is_div e2
+      in
+          ptr_bopM "<=" (bracket lbc t1, bracket rbc t2)
+      end
+1
+2
+3
+4
+5
+6
+7
+8
+))
+| Gt (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+(
+let
+val lbc = is_add e1 orelse is_minus e1 orelse is_mult e1 orelse is_div e1
+val rbc = is_add e2 orelse is_minus e2 orelse is_mult e2 orelse is_div e2
+in
+ptr_bopM “>” (bracket lbc t1, bracket rbc t2)
+end
+))
+| Ge (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+(
+let
+val lbc = is_add e1 orelse is_minus e1 orelse is_mult e1 orelse is_div e1
+val rbc = is_add e2 orelse is_minus e2 orelse is_mult e2 orelse is_div e2
+in
+ptr_bopM “>=” (bracket lbc t1, bracket rbc t2)
+end
+))
+| Eq (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+(
+let
+val lbc = is_add e1 orelse is_minus e1 orelse is_mult e1 orelse is_div e1
+val rbc = is_add e2 orelse is_minus e2 orelse is_mult e2 orelse is_div e2
+in
+ptr_bopM “==” (bracket lbc t1, bracket rbc t2)
+end
+))
+| Neq (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+(
+let
+val lbc = is_add e1 orelse is_minus e1 orelse is_mult e1 orelse is_div e1
+val rbc = is_add e2 orelse is_minus e2 orelse is_mult e2 orelse is_div e2
+in
+ptr_bopM “<>” (bracket lbc t1, bracket rbc t2)
+end
+))
+| Not e => E e : |-- (fn t => (
+let
+val bc = is_and e orelse is_or e orelse is_lt e orelse is_le e orelse is_gt e orelse is_ge e orelse is_eq e orelse is_neq e
+in
+ptr_opM "not " (bracket bc t)
+end
+))
+| And (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+let
+val lbc = is_or e1 orelse is_lt e1 orelse is_le e1 orelse is_gt e1 orelse is_ge e1 orelse is_eq e1 orelse is_neq e1
+val rbc = is_or e2 orelse is_lt e2 orelse is_le e2 orelse is_gt e2 orelse is_ge e2 orelse is_eq e2 orelse is_neq e2
+in
+ptr_bopM “&&” (bracket lbc t1, bracket rbc t2)
+end
+)
+| Or (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) => (
+let
+val lbc = is_lt e1 orelse is_le e1 orelse is_gt e1 orelse is_ge e1 orelse is_eq e1 orelse is_neq e1
+val rbc = is_lt e2 orelse is_le e2 orelse is_gt e2 orelse is_ge e2 orelse is_eq e2 orelse is_neq e2 orelse is_and e2 orelse is_or e2
+in
+ptr_bopM “||” (bracket lbc t1, bracket rbc t2)
+end
+))
+| Asgn (i, e) => E e : |-- (fn p => returnM @{qsource <open> @{(str i)} = @{p} <close> })
+| (Ift (b, c)) => (E b-- E c) : |-- (fn (pb, pc) =>
+returnM @{qsource <open> if (@{pb}) then {@{Pretty.fbrk} @{pc}@{Pretty.fbrk}} <close> })
+| (Ife (b, c1, c2)) => ((E b-- E c1) – E c2) : |-- (fn ((pb, pc1), pc2) =>
+returnM @{qsource <open> if @{pb} then @{pc1} else @{pc2} <close> })
+| (While (b, c)) => (E b-- E c) : |-- (fn (pb, pc) =>
+returnM @{qsource <open> while (@{pb}) {@{Pretty.fbrk} @{pc}@{Pretty.fbrk}} <close> })
+| (Seq (c1, c2)) => (E c1-- E c2) : |-- (fn (pc1, pc2) =>
+returnM @{qsource <open> @{pc1}; @{(Pretty.fbrk)}@{pc2} <close> })
+)
+
+      : |-- (fn e => (get_seekingM : |-- (fn step' => if (step = step') then  returnM (mark_red e) else returnM (e))))
+1
+)
+in
+fun show num source =
+(source |> tokens_of |> SEQ |> fst |> E)
+(tstate {vars = [], eqns = [], curvar = 0, seeking = ( num),step = (Const 1),num=0})
+|> fst |> writeln
+end
+
+}
+ML{
+val c = typing “(3) && true”
+}
+ML{
+exception TypeErrorn of (unit*(((exp*int) * (TE * TE))))😭*used to output a wrong information *)
+}
+ML{
+
+fun typing source =
+let
+val (result_T, tstate {vars, eqns, …}) =
+(source |> tokens_of |> SEQ |> fst |> E)
+(tstate {vars = [], eqns = [], curvar = 0,step=Const 0,num=0,seeking = 0})
+val tenv = solve eqns handle TypeError (step,(t, u)) => ((raise TypeErrorn((show (snd step) source),((step,(t, u))))) handle TypeErrorn(_,((step,(t, u)))) => raise TypeError(step,(t, u)))
+val result_type = chaseM result_T tenv |> fst
+val types = vars |> map (fn (v, vt) => (v, chaseM vt tenv |> fst))
+in
+(result_type, types)
+end
+}
+ML{
+val d = typing “s=0;i=0;n=9; while (s) {s=s+i;i=i+1}”
+}
+ML{
+val e = typing “x=x+y-z+10;t=0;if x then y=x+y”
+}
+ML{
+val f = typing “s=0;i=1;n=9;if (n<10) then {n = 10;k=1}; while (i) {s=s+i;i=i+1}”
+*}
+
+ML{*
+val SEQ1 =SEQ
+datatype label = IL of int | NL of string | RR of int
+datatype temp = IT of int | NT of string
+
+datatype stm = SEQ of stm * stm
+| LABEL of label
+| JUMP of iexp * label list
+| CJUMP of relop * iexp * iexp * label * label
+| SJUMP of relop * iexp * iexp * label
+| MOVE of iexp * iexp
+| SREGS of int
+| RREGS of int
+| CREGS of int
+
+and iexp = BINOP of binop * iexp * iexp
+| CONST of int
+| MEM of iexp
+| TEMP of temp
+| ESEQ of stm * iexp
+
+and binop = PLUS | MINUS | MUL | DIV | AND | OR |
+LSHIFT | RSHIFT | ARSHIFT | XOR
+
+and relop = EQ | NE | LT | GT | LE | GE | ULT | ULE | UGT | UGE
+datatype ival = Ex of iexp | Nx of stm | Cx of label * label -> stm
+}
+ML{
+val state_type = “state”
+val vars = [ ( “vars” , “(string * int) list” ),
+( “labelIdx” , “int” ) ]
+val _ = record_defs [] state_type vars
+}
+ML{
+val new_labelM = get_labelIdxM: |-- (fn n => set_labelIdxM (n+1)|-- returnM (IL n))
+}
+ML{
+fun seq (x::xs) = foldl (fn (x,y)=> SEQ (x,y)) (last (x::xs)) ((rev(x::(but_last xs))))
+}
+ML{
+fun varM v = get_varsM : |-- (fn vars => returnM (tb_lookup v vars))
+fun jump x = JUMP (CONST 0 ,[x])
+}
+ML{
+fun E e =
+(case e of
+Const i => returnM (Ex (CONST i))
+| Var v => varM v : |-- (fn vaddr => returnM (Ex (MEM (CONST vaddr))))
+| Add (e1, e2) => E e1 --E e2 : |–
+(fn (Ex ie1, Ex ie2) => returnM (Ex (BINOP (PLUS, ie1, ie2))))
+
+|Minus (e1,e2) => (E e1 – E e2) : |–
+(fn (Ex ie1,Ex ie2) => returnM (Ex (BINOP (MINUS ,ie1,ie2))))
+|Mult (e1,e2) => (E e1 – E e2) : |–
+(fn (Ex ie1,Ex ie2) => returnM (Ex (BINOP (MUL ,ie1,ie2))))
+|Div (e1,e2) => (E e1 – E e2) : |–
+(fn (Ex ie1,Ex ie2) => returnM (Ex (BINOP (DIV ,ie1,ie2))))
+| Neg e => E e : |–
+(fn Ex ie => returnM (Ex (BINOP (MINUS, CONST 0, ie))))
+
+| True => returnM (Cx (fn (t, f) => JUMP (CONST 0,[t])))
+|False => returnM (Cx (fn (t, f) => JUMP (CONST 0,[f])))
+| Lt (e1, e2) => E e1 – E e2 : |-- (fn (Ex ie1, Ex ie2) =>
+returnM (Cx (fn (t, f) => CJUMP (LT, ie1, ie2, t, f))))
+| Le (e1, e2) => E e1 – E e2 : |-- (fn (Ex ie1, Ex ie2) =>
+returnM (Cx (fn (t, f) => CJUMP (LE, ie1, ie2, t, f))))
+| Gt (e1, e2) => E e1 – E e2 : |-- (fn (Ex ie1, Ex ie2) =>
+returnM (Cx (fn (t, f) => CJUMP (GT, ie1, ie2, t, f))))
+| Ge (e1, e2) => E e1 – E e2 : |-- (fn (Ex ie1, Ex ie2) =>
+returnM (Cx (fn (t, f) => CJUMP (GE, ie1, ie2, t, f))))
+| Eq (e1, e2) => E e1 – E e2 : |-- (fn (Ex ie1, Ex ie2) =>
+returnM (Cx (fn (t, f) => CJUMP (EQ, ie1, ie2, t, f))))
+| Not (Lt (e1,e2)) => E e1 – E e2 : |-- (fn (Ex ie1,Ex ie2) => returnM (Cx (fn (t,f) => CJUMP (ULT,ie1,ie2,t,f))))
+| Not (Le (e1,e2)) => E e1 – E e2 : |-- (fn (Ex ie1,Ex ie2) => returnM (Cx (fn (t,f) => CJUMP (ULE,ie1,ie2,t,f))))
+| Not (Gt (e1,e2)) => E e1 – E e2 : |-- (fn (Ex ie1,Ex ie2) => returnM (Cx (fn (t,f) => CJUMP (UGT,ie1,ie2,t,f))))
+| Not (Ge (e1,e2)) => E e1 – E e2 : |-- (fn (Ex ie1,Ex ie2) => returnM (Cx (fn (t,f) => CJUMP (UGE,ie1,ie2,t,f))))
+
+| Neq (e1, e2) => E e1 – E e2 : |-- (fn (Ex ie1, Ex ie2) =>
+returnM (Cx (fn (t, f) => CJUMP (NE, ie1, ie2, t, f))))
+| Not e => E e : |-- (fn (Cx ce) =>
+returnM (Cx (fn (t, f) => ce (f, t))))
+| And (e1, e2) => E e1-- E e2 : |-- (fn (Cx ce1, Cx ce2) =>
+new_labelM : |-- (fn l =>
+returnM (Cx (fn (t, f) => seq [ce1 (l,f), LABEL l, ce2 (t, f)]))))
+
+|Or (e1,e2) => (E e1–E e2): |-- (fn (Cx ce1,Cx ce2)=>
+new_labelM : |-- (fn l =>
+returnM (Cx (fn (t, f) => seq [ce1 (f,l), LABEL l, ce2 (t, f)]))))
+
+| Asgn (i, e) => (varM i --E e) : |-- (fn (vaddr, Ex ie) =>
+returnM (Nx (MOVE (MEM(CONST vaddr), ie))))
+
+| Ife (b, c1, c2) => ((E b-- E c1) – E c2) : |-- (fn ((Cx cb, Nx sc1), Nx sc2) =>
+((new_labelM – new_labelM) – new_labelM) : |-- (fn ((t, f), el) =>
+returnM (Nx (seq [cb (t, f), LABEL t, sc1, jump el, LABEL f, sc2, LABEL el]))))
+
+| Ift ( c1, c2) => (( E c1) – E c2) : |-- (fn ((Cx cb, Nx sc1)) =>
+((new_labelM – new_labelM)–new_labelM) : |-- (fn ((t, f),el) =>
+returnM (Nx (seq [cb (t, f), LABEL t, sc1, LABEL f]))))
+
+|While (e1,e2) => (E e1 – E e2): |-- (fn ((Cx cb ,Nx sc1)) =>
+(new_labelM–new_labelM–new_labelM): |–(fn ((l,t),f)=>
+returnM (Nx(seq[LABEL l,cb(t,f),LABEL t,sc1,jump l,LABEL f ]))))
+
+|Seq (e1,e2) => (E e1 – E e2) : |-- (fn (Nx t,Nx u) => returnM (Nx (seq [t,u])))
+)
+
+}
+ML{
+val d = “s = 0;i = 0; N = 10”|> String.explode |> lexer |> fst |>SEQ1 |>fst
+val c = typing
+}
+ML{
+val d = “s = 0;i = 0; N = 10;while (i<=N) {s=s+i;i=i+1}”
+fun parse c = c |> String.explode |> lexer |> fst |>SEQ1 |>fst
+}
+ML{
+(|> String.explode |> lexer |> fst |>SEQ)
+}
+ML{
+val (_, vars) = typing (d )
+val var_locs = zip ((rev vars) |> map fst) (upto 1 (length vars))
+val (Nx stms, st) = (d |> parse |> E)
+(state {vars = var_locs, labelIdx = 1})
+
+}
+ML{
+val d = “s=0;i=0;n=9;if (n<10) then {n = 10;k=1} else 1; while (i<=n) {s=s+i;i=i+1}”
+}
+ML{
+val (_, vars) = typing (d )
+val var_locs = zip ((rev vars) |> map fst) (upto 1 (length vars))
+val (Nx stm, st) = (d |> parse |> E)
+(state {vars = var_locs, labelIdx = 1})
+
+}
+ML{
+
+*}
+
+ML{*
+fun upto m n = if n < m then []
+else m::upto (m + 1) n
+exception Bug
+
+}
+( 1 *)
+
+peep{*
+
+t = 20;
+a = 1+t*500
+
+}
+ML{
+fun seq_of source = (the_source ()|> String.explode |>lexer |> fst |> SEQ1|>fst)
+}
+ML {
+val source = the_source ()|> seq_of
+val (_,vars) = typing (the_source ())
+val l = typing (the_source ())
+val var_locs = zip (vars |> map fst)(upto 1 (length vars))
+fun parse source = source|> seq_of
+val (Nx result,st) = (the_source () |> parse |> E)
+(state {vars = var_locs,labelIdx = 1})
+}
+ML{
+val ans = SEQ (MOVE (MEM (CONST 1), CONST 20),
+MOVE (MEM (CONST 2),
+BINOP (PLUS, CONST 1, BINOP (MUL, MEM (CONST 1), CONST 500))))
+val it = if result=ans then true else raise Bug
+*}
+
+(* 2 )
+peep{
+
+i = u / ( x - (i + 20) * 5)
+
+}
+ML{
+val source = the_source ()|> seq_of*}
+ML {*
+val source = the_source ()|> seq_of
+val (_,vars) = typing (the_source ())
+val l = typing (the_source ())
+val var_locs = zip (vars |> map fst) (upto 1 (length vars))
+fun parse source = source|> seq_of
+val (Nx result,st) = (the_source () |> parse |> E)
+(state {vars = var_locs,labelIdx = 1})
+}
+ML{
+val ans = MOVE (MEM (CONST 1),
+BINOP
+(DIV, MEM (CONST 2),
+BINOP
+(MINUS, MEM (CONST 3),
+BINOP (MUL, BINOP (PLUS, MEM (CONST 1), CONST 20), CONST 5))))
+val it = if result=ans then true else raise Bug
+*}
+
+(* 3 )
+peep{
+if ((i < 10) && false || (j >= 5)) then s = 0 ;else s = 1;
+}
+ML{
+val source = the_source ()|> String.explode |>lexer |>fst |>SEQ1
+}
+ML {
+val source = the_source ()|> seq_of
+val (_,vars) = typing (the_source ())
+val var_locs = zip (vars |> map fst)(upto 1 (length vars))
+fun parse source = source|> seq_of
+val (Nx result,st) = (the_source () |> parse |> E)
+(state {vars = var_locs,labelIdx = 1})
+}
+ML{
+val ans = SEQ (SEQ (SEQ (CJUMP (LT, MEM (CONST 1), CONST 10, IL 1, IL 2),
+SEQ (LABEL (IL 1), JUMP (CONST 0, [IL 2]))),
+SEQ (LABEL (IL 2), CJUMP (GE, MEM (CONST 2), CONST 5, IL 3, IL 4))),
+SEQ (LABEL (IL 3),
+SEQ (MOVE (MEM (CONST 3), CONST 0),
+SEQ (JUMP (CONST 0, [IL 5]),
+SEQ (LABEL (IL 4),
+SEQ (MOVE (MEM (CONST 3), CONST 1), LABEL (IL 5)))))))
+val it = if result=ans then true else raise Bug
+*}
+
+(* 4 )
+peep{
+if ((i <= 10) && (6 == 7) && (j > 5)) then {s = 0;w = 100/10}
+*}
+
+ML {*
+val source = the_source ()|> seq_of
+val (_,vars) = typing (the_source ())
+val var_locs = zip (vars |> map fst)(upto 1 (length vars))
+fun parse source = source|> seq_of
+val (Nx result,st) = (the_source () |> parse |> E)
+(state {vars = var_locs,labelIdx = 1})
+}
+ML{
+val ans = SEQ (SEQ (SEQ (CJUMP (LE, MEM (CONST 1), CONST 10, IL 1, IL 4),
+SEQ (LABEL (IL 1), CJUMP (EQ, CONST 6, CONST 7, IL 2, IL 4))),
+SEQ (LABEL (IL 2), CJUMP (GT, MEM (CONST 2), CONST 5, IL 3, IL 4))),
+SEQ (LABEL (IL 3),
+SEQ (SEQ (MOVE (MEM (CONST 3), CONST 0),
+MOVE (MEM (CONST 4), BINOP (DIV, CONST 100, CONST 10))),
+LABEL (IL 4))))
+val it = if result=ans then true else raise Bug
+*}
+
+(* 5 )
+peep {
+s = 0;
+i = 0;
+while (i <= 10) {
+s = s + i;
+i = i + 1
+}
+*}
+
+ML {*
+val source = the_source ()|> seq_of
+val (_,vars) = typing (the_source ())
+val var_locs = zip (vars |> map fst)(upto 1 (length vars))
+fun parse source = source|> seq_of
+val (Nx result,st) = (the_source () |> parse |> E)
+(state {vars = var_locs,labelIdx = 1})
+}
+ML{
+val ans = SEQ (MOVE (MEM (CONST 1), CONST 0),
+SEQ (MOVE (MEM (CONST 2), CONST 0),
+SEQ (LABEL (IL 1),
+SEQ (CJUMP (LE, MEM (CONST 2), CONST 10, IL 2, IL 3),
+SEQ (LABEL (IL 2),
+SEQ (SEQ (MOVE (MEM (CONST 1),
+BINOP (PLUS, MEM (CONST 1), MEM (CONST 2))),
+MOVE (MEM (CONST 2),
+BINOP (PLUS, MEM (CONST 2), CONST 1))),
+SEQ (JUMP (CONST 0, [IL 1]), LABEL (IL 3))))))))
+val it = if result=ans then true else raise Bug
+*}
+
+(* 6 )
+peep {
+s = 0;
+i = 0;
+while (i <> 0 && not true) {
+s = s + ~ 2;
+i = i + 1
+}
+*}
+
+ML {*
+val source = the_source ()|> seq_of
+val (_,vars) = typing (the_source ())
+val var_locs = zip (vars |> map fst)(upto 1 (length vars))
+fun parse source = source|> seq_of
+val (Nx result,st) = (the_source () |> parse |> E)
+(state {vars = var_locs,labelIdx = 1})
+}
+ML{
+val ans = SEQ (MOVE (MEM (CONST 1), CONST 0),
+SEQ (MOVE (MEM (CONST 2), CONST 0),
+SEQ (LABEL (IL 2),
+SEQ (SEQ (CJUMP (NE, MEM (CONST 2), CONST 0, IL 1, IL 4),
+SEQ (LABEL (IL 1), JUMP (CONST 0, [IL 4]))),
+SEQ (LABEL (IL 3),
+SEQ (SEQ (MOVE (MEM (CONST 1),
+BINOP (PLUS, MEM (CONST 1), BINOP (MINUS, CONST 0, CONST 2))),
+MOVE (MEM (CONST 2),
+BINOP (PLUS, MEM (CONST 2), CONST 1))),
+SEQ (JUMP (CONST 0, [IL 2]), LABEL (IL 4))))))))
+val it = if result=ans then true else raise Bug
+*}
+
+ML{*
+fun runM_gen bstep stepM =
+let
+fun next_bstep bstep = if bstep <= 0 then bstep else bstep - 1
+fun execM bstep stm =
+if bstep = 0 then returnM [] else
+(getM – stepM stm : |-- (
+fn (st, SOME next_stm) =>
+execM (next_bstep bstep) next_stm : |–
+(fn results => if bstep <= 0 then returnM []
+else returnM ((st, stm)::results))
+| (st, _) => returnM [(st, stm)]))
+in
+execM bstep
+end
+}
+ML{
+fun linearize (SEQ (stm1, stm2)) = linearize stm1 @ linearize stm2
+| linearize stm = [stm]
+}
+ML{
+fun debugM bstep = runM_gen bstep
+fun runM x = runM_gen (~1) x
+}
+ML{
+val state_type = “state”
+val vars = [( “prog” , “stm list” ),
+( “curBlock” , “stm list” ),
+( “curLabel” , “label” ),
+( “blocks” , “(label * stm list) list” ),
+( “graph” , “(label * label) list” )]
+val _ = record_defs [] state_type vars
+*}
+
+ML{*
+val nextM = get_progM : |–
+(fn [] => returnM NONE
+| (stm::stms) => set_progM stms |-- returnM (SOME stm))
+*}
+
+ML{*
+fun guardM b xM = if b then xM else returnM ()
+}
+ML{
+fun close_block curLabel (v) =
+let
+val sx = rev v
+val d = hd sx
+val m = case d of (LABEL (label)) => label
+| _ => IL 1
+fun real x = case x of (LABEL _) => false
+| _ => true
+val c = if real d then ((([LABEL curLabel] @ sx))) else ((sx))
+fun del (LABEL g) = g
+val f = ((del (hd c)),c)
+in
+f
+end
+}
+ML{
+fun jumpM s = fn ((curblock,block),curlabel) => set_blocksM ((close_block curlabel ((s::curblock)))::block) |-- (get_graphM : |-- (
+
+   fn (n) => case s of JUMP(a,[b]) => set_graphM ((curlabel,b)::n)
+                     |CJUMP(a,b,c,d,e) => set_graphM ((curlabel,d)::((curlabel,e)::n))))|-- set_curBlockM []
+1
+2
+}
+ML{
+fun stepM stm =
+(case stm of
+LABEL l => get_curBlockM-- get_blocksM-- get_curLabelM : |–
+(fn ((curBlock, blocks), curLabel) =>
+guardM (curBlock <> []) (
+set_blocksM ((close_block curLabel (JUMP (CONST 0, [l])::curBlock))::blocks)
+|-- (get_graphM : |-- (fn G => set_graphM ((curLabel, l)::G)))
+) |-- set_curLabelM l |-- set_curBlockM [LABEL l])
+| s as JUMP _ => get_curBlockM – get_blocksM-- get_curLabelM : |-- jumpM s
+| s as CJUMP _ => get_curBlockM-- get_blocksM-- get_curLabelM : |-- jumpM s
+| s as _ => get_curBlockM : |-- (fn curBlock => set_curBlockM (s::curBlock))
+) |-- nextM
+}
+ML{
+fun goto e1 = JUMP (CONST 0, [e1])
+fun basic_blocks sl el stms = let
+val (_, state {blocks, curLabel, curBlock,graph,…}) = runM stepM (hd stms)
+(state {prog = tl stms, curBlock = [], curLabel = sl, blocks = [], graph=[]})
+val blocks = (if curBlock <> [] then close_block curLabel (goto el::curBlock)::blocks
+else blocks) |> rev
+val graph = (if curBlock <> [] then ((curLabel, el)::graph) else graph) |> rev
+in
+(blocks, graph)
+end
+}
+ML{
+val f =(linearize stms)
+}
+ML{
+val (blocks, graph) = basic_blocks (NL “_start” ) (NL “_done” ) f
+}
+ML{((blocks, graph) = basic_blocks (NL “_start” ) (NL “_done” ))
+val c = stepM ( hd (linearize stm)) (state {prog = tl (linearize stm), curBlock = [], curLabel = IL 1, blocks = [], graph=[]})
+*}
+
+ML{*
+exception Bug
+}
+( 1 )
+ML {
+val stms = [MOVE (MEM (CONST 1), CONST 20),
+MOVE (MEM (CONST 2), BINOP (PLUS, CONST 1, BINOP (MUL, MEM (CONST 1), CONST 500)))]
+val (blocks,graph) = basic_blocks (NL “_start”) (NL “_done”) stms
+}
+ML{
+val ans_blocks = [(NL “_start”,
+[LABEL (NL “_start”), MOVE (MEM (CONST 1), CONST 20),
+MOVE (MEM (CONST 2), BINOP (PLUS, CONST 1, BINOP (MUL, MEM (CONST 1), CONST 500))), JUMP (CONST 0, [NL “_done”])])]
+val ans_graph = [(NL “_start”, NL “_done”)]
+val it = if blocks=ans_blocks andalso graph = ans_graph then true else raise Bug
+*}
+
+(* 2 )
+ML {
+val stms = [MOVE (MEM (CONST 1),
+BINOP (DIV, MEM (CONST 2),
+BINOP (MINUS, MEM (CONST 3), BINOP (MUL, BINOP (PLUS, MEM (CONST 1), CONST 20), CONST 5))))]
+val (blocks,graph) = basic_blocks (NL “_start”) (NL “_done”) stms
+}
+ML{
+val ans_blocks = [(NL “_start”,
+[LABEL (NL “_start”),
+MOVE (MEM (CONST 1),
+BINOP (DIV, MEM (CONST 2),
+BINOP (MINUS, MEM (CONST 3), BINOP (MUL, BINOP (PLUS, MEM (CONST 1), CONST 20), CONST 5)))),
+JUMP (CONST 0, [NL “_done”])])]
+val ans_graph = [(NL “_start”, NL “_done”)]
+val it = if blocks=ans_blocks andalso graph = ans_graph then true else raise Bug
+*}
+
+(* 3 *)
+
+ML {*
+val stms = [CJUMP (LT, MEM (CONST 1), CONST 10, IL 1, IL 2), LABEL (IL 1), JUMP (CONST 0, [IL 2]), LABEL (IL 2),
+CJUMP (GE, MEM (CONST 2), CONST 5, IL 3, IL 4), LABEL (IL 3), MOVE (MEM (CONST 3), CONST 0), JUMP (CONST 0, [IL 5]),
+LABEL (IL 4), MOVE (MEM (CONST 3), CONST 1), LABEL (IL 5)]
+val (blocks,graph) = basic_blocks (NL “_start”) (NL “_done”) stms
+}
+ML{
+val ans_blocks = [(NL “_start”, [LABEL (NL “_start”), CJUMP (LT, MEM (CONST 1), CONST 10, IL 1, IL 2)]),
+(IL 1, [LABEL (IL 1), JUMP (CONST 0, [IL 2])]),
+(IL 2, [LABEL (IL 2), CJUMP (GE, MEM (CONST 2), CONST 5, IL 3, IL 4)]),
+(IL 3, [LABEL (IL 3), MOVE (MEM (CONST 3), CONST 0), JUMP (CONST 0, [IL 5])]),
+(IL 4, [LABEL (IL 4), MOVE (MEM (CONST 3), CONST 1), JUMP (CONST 0, [IL 5])]),
+(IL 5, [LABEL (IL 5), JUMP (CONST 0, [NL “_done”])])]
+val ans_graph = [(NL “_start”, IL 2), (NL “_start”, IL 1), (IL 1, IL 2), (IL 2, IL 4), (IL 2, IL 3), (IL 3, IL 5), (IL 4, IL 5),
+(IL 5, NL “_done”)]
+val it = if blocks=ans_blocks andalso graph = ans_graph then true else raise Bug
+*}
+
+(* 4 )
+ML {
+val stms = [CJUMP (LE, MEM (CONST 1), CONST 10, IL 1, IL 4), LABEL (IL 1), CJUMP (EQ, CONST 6, CONST 7, IL 2, IL 4), LABEL (IL 2),
+CJUMP (GT, MEM (CONST 2), CONST 5, IL 3, IL 4), LABEL (IL 3), MOVE (MEM (CONST 3), CONST 0),
+MOVE (MEM (CONST 4), BINOP (DIV, CONST 100, CONST 10)), LABEL (IL 4)]
+val (blocks,graph) = basic_blocks (NL “_start”) (NL “_done”) stms
+}
+ML{
+val ans_blocks = [(NL “_start”, [LABEL (NL “_start”), CJUMP (LE, MEM (CONST 1), CONST 10, IL 1, IL 4)]),
+(IL 1, [LABEL (IL 1), CJUMP (EQ, CONST 6, CONST 7, IL 2, IL 4)]),
+(IL 2, [LABEL (IL 2), CJUMP (GT, MEM (CONST 2), CONST 5, IL 3, IL 4)]),
+(IL 3, [LABEL (IL 3), MOVE (MEM (CONST 3), CONST 0), MOVE (MEM (CONST 4), BINOP (DIV, CONST 100, CONST 10)),
+JUMP (CONST 0, [IL 4])]),
+(IL 4, [LABEL (IL 4), JUMP (CONST 0, [NL “_done”])])]
+val ans_graph = [(NL “_start”, IL 4), (NL “_start”, IL 1), (IL 1, IL 4), (IL 1, IL 2), (IL 2, IL 4), (IL 2, IL 3), (IL 3, IL 4),
+(IL 4, NL “_done”)]
+val it = if blocks=ans_blocks andalso graph = ans_graph then true else raise Bug
+*}
+
+(* 5 *)
+
+ML {*
+
+val stms = [MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0), LABEL (IL 1),
+CJUMP (LE, MEM (CONST 2), CONST 10, IL 2, IL 3), LABEL (IL 2),
+MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), MEM (CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)), JUMP (CONST 0, [IL 1]), LABEL (IL 3)]
+val (blocks,graph) = basic_blocks (NL “_start”) (NL “_done”) stms
+}
+ML{
+val ans_blocks = [(NL “_start”,
+[LABEL (NL “_start”), MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0), JUMP (CONST 0, [IL 1])]),
+(IL 1, [LABEL (IL 1), CJUMP (LE, MEM (CONST 2), CONST 10, IL 2, IL 3)]),
+(IL 2, [LABEL (IL 2), MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), MEM (CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)), JUMP (CONST 0, [IL 1])]),
+(IL 3, [LABEL (IL 3), JUMP (CONST 0, [NL “_done”])])]
+val ans_graph = [(NL “_start”, IL 1), (IL 1, IL 3), (IL 1, IL 2), (IL 2, IL 1), (IL 3, NL “_done”)]
+val it = if blocks=ans_blocks andalso graph = ans_graph then true else raise Bug
+
+*}
+
+(* 6 )
+ML {
+val stms = [MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0), LABEL (IL 2),
+CJUMP (NE, MEM (CONST 2), CONST 0, IL 1, IL 4), LABEL (IL 1), JUMP (CONST 0, [IL 4]), LABEL (IL 3),
+MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), BINOP (MINUS, CONST 0, CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)), JUMP (CONST 0, [IL 2]), LABEL (IL 4)]
+val (blocks,graph) = basic_blocks (NL “_start”) (NL “_done”) stms
+}
+ML{
+val ans_blocks = [(NL “_start”,
+[LABEL (NL “_start”), MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0), JUMP (CONST 0, [IL 2])]),
+(IL 2, [LABEL (IL 2), CJUMP (NE, MEM (CONST 2), CONST 0, IL 1, IL 4)]), (IL 1, [LABEL (IL 1), JUMP (CONST 0, [IL 4])]),
+(IL 3, [LABEL (IL 3), MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), BINOP (MINUS, CONST 0, CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)), JUMP (CONST 0, [IL 2])]),
+(IL 4, [LABEL (IL 4), JUMP (CONST 0, [NL “_done”])])]
+val ans_graph = [(NL “_start”, IL 2), (IL 2, IL 4), (IL 2, IL 1), (IL 1, IL 4), (IL 3, IL 2), (IL 4, NL “_done”)]
+val it = if blocks=ans_blocks andalso graph = ans_graph then true else raise Bug
+*}
+
+(7)
+ML {*
+val stms = [MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0),
+MOVE (MEM (CONST 3), CONST 10), LABEL (IL 1),
+CJUMP (LE, MEM (CONST 2), MEM (CONST 3), IL 2, IL 3), LABEL (IL 2),
+MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), MEM (CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)),
+JUMP (CONST 0, [IL 1]), LABEL (IL 3)]
+val (blocks,graph) = basic_blocks (NL “start”) (NL “end”) stms
+*}
+
+ML{*
+val blocks_ans =
+[(NL “start”,
+[LABEL (NL “start”), MOVE (MEM (CONST 1), CONST 0),
+MOVE (MEM (CONST 2), CONST 0), MOVE (MEM (CONST 3), CONST 10),
+JUMP (CONST 0, [IL 1])]),
+(IL 1, [LABEL (IL 1), CJUMP (LE, MEM (CONST 2), MEM (CONST 3), IL 2, IL 3)]),
+(IL 2,
+[LABEL (IL 2),
+MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), MEM (CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)),
+JUMP (CONST 0, [IL 1])]),
+(IL 3, [LABEL (IL 3), JUMP (CONST 0, [NL “end”])])]
+val graph_ans =
+[(NL “start”, IL 1), (IL 1, IL 3), (IL 1, IL 2), (IL 2, IL 1), (IL 3, NL “end”)]
+
+val it = if blocks = blocks_ans andalso graph = graph_ans then true else raise Bug
+*}
+
+(8)
+ML {*
+val stms = [CJUMP (LT, MEM (CONST 1), CONST 10, IL 2, IL 1), LABEL (IL 1), JUMP (CONST 0, [IL 2]), LABEL (IL 2),
+MOVE (MEM (CONST 1), CONST 0), LABEL (IL 3)]
+val (blocks,graph) = basic_blocks (NL “_start”) (NL “_done”) stms
+}
+ML{
+val ans_blocks = [(NL “_start”, [LABEL (NL “_start”), CJUMP (LT, MEM (CONST 1), CONST 10, IL 2, IL 1)]),
+(IL 1, [LABEL (IL 1), JUMP (CONST 0, [IL 2])]),
+(IL 2, [LABEL (IL 2), MOVE (MEM (CONST 1), CONST 0), JUMP (CONST 0, [IL 3])]),
+(IL 3, [LABEL (IL 3), JUMP (CONST 0, [NL “_done”])])]
+val ans_graph =[(NL “_start”, IL 1), (NL “_start”, IL 2), (IL 1, IL 2), (IL 2, IL 3), (IL 3, NL “_done”)]
+val it = if blocks=ans_blocks andalso graph = ans_graph then true else raise Bug
+*}
+
+ML{*
+val state_type = “state”
+val vars = [ ( “prog” ,"(label * stm list) list" ),
+( “trace” , “(label * stm list) list” ),
+( “marked” , “label list” ) ]
+val _ = record_defs [] state_type vars
+}
+ML{
+val c =[1,2,3,4]
+val d = tl c
+fun next_of body = case last body of
+(CJUMP (,,,,a)) => a
+|(JUMP (_,B))=>hd B
+}
+ML{
+fun stepM (label, body) = (get_markedM-- get_traceM --get_progM): |–
+(fn ((marked, trace), prog) => (let
+val new_marked = label::marked
+
+val next = next_of body
+val next_block =
+if (tb_defined next prog andalso (not (member next new_marked))) then
+(SOME (next, (tb_lookup next prog)))
+else (case (filter (fn (l, ) => (not (member l new_marked))) prog) of
+(block::) => SOME block
+| _ => NONE)
+in
+set_traceM ((label, body)::trace) |–
+set_markedM new_marked |–
+returnM next_block
+end))
+}
+ML{
+fun reorder blocks = let
+val (_, state {trace,…}) = runM stepM (hd blocks)
+(state {prog = blocks, trace = [], marked = []})
+val trace = trace |> rev
+in trace end
+}
+ML{
+val gg = [(NL “_start”,
+[LABEL (NL “_start”), MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0), MOVE (MEM (CONST 3), CONST 10),
+JUMP (CONST 0, [IL 1])]),
+(IL 1, [LABEL (IL 1), CJUMP (LE, MEM (CONST 2), MEM (CONST 3), IL 2, IL 3)]),
+(IL 2, [LABEL (IL 2), MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), MEM (CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)), JUMP (CONST 0, [IL 1])]),
+(IL 3, [LABEL (IL 3), JUMP (CONST 0, [NL “_done”])])]
+val f = reorder gg
+*}
+
+ML{*
+fun clear0 [] = []
+|clear0 ((label,body)::xss) =
+let
+val c = case rev body of
+(CJUMP (a,b,c,d,e))::xs=> if e = (fst(hd xss)) then (rev (SJUMP(a,b,c,d)::xs)) else body
+|(JUMP (a,[b])) ::xs => if xss = [] then ( body) else
+if b = (fst(hd xss)) then ((rev xs ))
+else ((body))
+in c @ (clear0 xss)
+end
+}
+ML{
+
+val d = clear0 gg
+}
+ML{
+val block = [(NL"_start",[LABEL (NL"_start"),MOVE(MEM(CONST 1), CONST 2),MOVE(MEM(CONST 2),BINOP(PLUS,CONST 1,BINOP(MUL,MEM(CONST 1),CONST 500))),JUMP(CONST 0,[NL"_done"])])]
+}
+ML{
+
+val d = clear0 block
+}
+ML{
+fun clear2 x = (((clear0 (reorder x))))
+val clear = clear2
+}
+ML{
+exception Bug
+}
+( 1 )
+ML {
+val blocks = [(NL “_start”,
+[LABEL (NL “_start”), MOVE (MEM (CONST 1), CONST 20),
+MOVE (MEM (CONST 2), BINOP (PLUS, CONST 1, BINOP (MUL, MEM (CONST 1), CONST 500))), JUMP (CONST 0, [NL “_done”])])]
+val stms = clear blocks
+}
+ML{
+val ans_stms = [LABEL (NL “_start”), MOVE (MEM (CONST 1), CONST 20), MOVE (MEM (CONST 2), BINOP (PLUS, CONST 1, BINOP (MUL, MEM (CONST 1), CONST 500))),
+JUMP (CONST 0, [NL “_done”])]
+val it = if stms = ans_stms then true else raise Bug
+*}
+
+(* 2 )
+ML {
+val blocks =[(NL “_start”,
+[LABEL (NL “_start”),
+MOVE (MEM (CONST 1),
+BINOP (DIV, MEM (CONST 2),
+BINOP (MINUS, MEM (CONST 3), BINOP (MUL, BINOP (PLUS, MEM (CONST 1), CONST 20), CONST 5)))),
+JUMP (CONST 0, [NL “_done”])])]
+val stms =clear blocks
+}
+ML{
+val ans_stms = [LABEL (NL “_start”),
+MOVE (MEM (CONST 1), BINOP (DIV, MEM (CONST 2), BINOP (MINUS, MEM (CONST 3), BINOP (MUL, BINOP (PLUS, MEM (CONST 1), CONST 20), CONST 5)))),
+JUMP (CONST 0, [NL “_done”])]
+val it = if stms = ans_stms then true else raise Bug
+*}
+
+(* 3 *)
+
+ML {*
+val blocks = [(NL “_start”, [LABEL (NL “_start”), CJUMP (LT, MEM (CONST 1), CONST 10, IL 1, IL 2)]),
+(IL 1, [LABEL (IL 1), JUMP (CONST 0, [IL 2])]),
+(IL 2, [LABEL (IL 2), CJUMP (GE, MEM (CONST 2), CONST 5, IL 3, IL 4)]),
+(IL 3, [LABEL (IL 3), MOVE (MEM (CONST 3), CONST 0), JUMP (CONST 0, [IL 5])]),
+(IL 4, [LABEL (IL 4), MOVE (MEM (CONST 3), CONST 1), JUMP (CONST 0, [IL 5])]),
+(IL 5, [LABEL (IL 5), JUMP (CONST 0, [NL “_done”])])]
+val stms = clear blocks
+}
+ML{
+val ans_stms = [LABEL (NL “_start”), SJUMP (LT, MEM (CONST 1), CONST 10, IL 1), LABEL (IL 2), SJUMP (GE, MEM (CONST 2), CONST 5, IL 3), LABEL (IL 4),
+MOVE (MEM (CONST 3), CONST 1), LABEL (IL 5), JUMP (CONST 0, [NL “_done”]), LABEL (IL 1), JUMP (CONST 0, [IL 2]), LABEL (IL 3),
+MOVE (MEM (CONST 3), CONST 0), JUMP (CONST 0, [IL 5])]
+val it = if stms = ans_stms then true else raise Bug
+*}
+
+(* 4 )
+ML {
+val blocks = [(NL “_start”, [LABEL (NL “_start”), CJUMP (LE, MEM (CONST 1), CONST 10, IL 1, IL 4)]),
+(IL 1, [LABEL (IL 1), CJUMP (EQ, CONST 6, CONST 7, IL 2, IL 4)]),
+(IL 2, [LABEL (IL 2), CJUMP (GT, MEM (CONST 2), CONST 5, IL 3, IL 4)]),
+(IL 3, [LABEL (IL 3), MOVE (MEM (CONST 3), CONST 0), MOVE (MEM (CONST 4), BINOP (DIV, CONST 100, CONST 10)),
+JUMP (CONST 0, [IL 4])]),
+(IL 4, [LABEL (IL 4), JUMP (CONST 0, [NL “_done”])])]
+val stms =clear blocks
+}
+ML{
+val ans_stms =
+[LABEL (NL “_start”), SJUMP (LE, MEM (CONST 1), CONST 10, IL 1), LABEL (IL 4), JUMP (CONST 0, [NL “_done”]), LABEL (IL 1),
+CJUMP (EQ, CONST 6, CONST 7, IL 2, IL 4), LABEL (IL 2), CJUMP (GT, MEM (CONST 2), CONST 5, IL 3, IL 4), LABEL (IL 3),
+MOVE (MEM (CONST 3), CONST 0), MOVE (MEM (CONST 4), BINOP (DIV, CONST 100, CONST 10)), JUMP (CONST 0, [IL 4])]
+val it = if stms = ans_stms then true else raise Bug
+*}
+
+(* 5 *)
+
+ML {*
+
+val blocks = [(NL “_start”,
+[LABEL (NL “_start”), MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0), JUMP (CONST 0, [IL 1])]),
+(IL 1, [LABEL (IL 1), CJUMP (LE, MEM (CONST 2), CONST 10, IL 2, IL 3)]),
+(IL 2, [LABEL (IL 2), MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), MEM (CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)), JUMP (CONST 0, [IL 1])]),
+(IL 3, [LABEL (IL 3), JUMP (CONST 0, [NL “_done”])])]
+val stms =clear blocks
+}
+ML{
+val ans_stms =
+[LABEL (NL “_start”), MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0), LABEL (IL 1), SJUMP (LE, MEM (CONST 2), CONST 10, IL 2),
+LABEL (IL 3), JUMP (CONST 0, [NL “_done”]), LABEL (IL 2), MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), MEM (CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)), JUMP (CONST 0, [IL 1])]
+val it = if stms = ans_stms then true else raise Bug
+
+*}
+
+(* 6 )
+ML {
+val blocks = [(NL “_start”,
+[LABEL (NL “_start”), MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0), JUMP (CONST 0, [IL 2])]),
+(IL 2, [LABEL (IL 2), CJUMP (NE, MEM (CONST 2), CONST 0, IL 1, IL 4)]), (IL 1, [LABEL (IL 1), JUMP (CONST 0, [IL 4])]),
+(IL 3, [LABEL (IL 3), MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), BINOP (MINUS, CONST 0, CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)), JUMP (CONST 0, [IL 2])]),
+(IL 4, [LABEL (IL 4), JUMP (CONST 0, [NL “_done”])])]
+val stms =clear blocks
+}
+ML{
+val ans_stms =
+[LABEL (NL “_start”), MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0), LABEL (IL 2), SJUMP (NE, MEM (CONST 2), CONST 0, IL 1),
+LABEL (IL 4), JUMP (CONST 0, [NL “_done”]), LABEL (IL 1), JUMP (CONST 0, [IL 4]), LABEL (IL 3),
+MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), BINOP (MINUS, CONST 0, CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)), JUMP (CONST 0, [IL 2])]
+val it = if stms = ans_stms then true else raise Bug
+*}
+
+(7)
+ML {*
+val blocks =
+[(NL “start”,
+[LABEL (NL “start”), MOVE (MEM (CONST 1), CONST 0),
+MOVE (MEM (CONST 2), CONST 0), MOVE (MEM (CONST 3), CONST 10),
+JUMP (CONST 0, [IL 1])]),
+(IL 1, [LABEL (IL 1), CJUMP (LE, MEM (CONST 2), MEM (CONST 3), IL 2, IL 3)]),
+(IL 2,
+[LABEL (IL 2),
+MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), MEM (CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)),
+JUMP (CONST 0, [IL 1])]),
+(IL 3, [LABEL (IL 3), JUMP (CONST 0, [NL “end”])])]
+val stms =clear blocks
+*}
+
+ML{*
+val ans_stms =
+[LABEL (NL “start”), MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0), MOVE (MEM (CONST 3), CONST 10), LABEL (IL 1),
+SJUMP (LE, MEM (CONST 2), MEM (CONST 3), IL 2), LABEL (IL 3), JUMP (CONST 0, [NL “end”]), LABEL (IL 2),
+MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), MEM (CONST 2))), MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)),
+JUMP (CONST 0, [IL 1])]
+
+val it = if stms = ans_stms then true else raise Bug
+*}
+
+(8)
+ML {*
+val blocks = [(NL “_start”, [LABEL (NL “_start”), CJUMP (LT, MEM (CONST 1), CONST 10, IL 2, IL 1)]),
+(IL 1, [LABEL (IL 1), JUMP (CONST 0, [IL 2])]),
+(IL 2, [LABEL (IL 2), MOVE (MEM (CONST 1), CONST 0), JUMP (CONST 0, [IL 3])]),
+(IL 3, [LABEL (IL 3), JUMP (CONST 0, [NL “_done”])])]
+val stms =clear blocks
+}
+ML{
+val ans_stms =
+[LABEL (NL “_start”), SJUMP (LT, MEM (CONST 1), CONST 10, IL 2), LABEL (IL 1), LABEL (IL 2), MOVE (MEM (CONST 1), CONST 0), LABEL (IL 3),
+JUMP (CONST 0, [NL “_done”])]
+val it = if stms = ans_stms then true else raise Bug
+*}
+
+ML{*
+val state_type = “state”
+val vars = [ ( “num” ,“int list” ),
+( “need” , “(int list * int) list” ),
+( “prog” , “stm list” ),
+(“n”,“int”),
+(“labels”,"(label * int) list")]
+val _ = record_defs [] state_type vars
+}
+ML{
+fun reg_of k = TEMP (IT k)
+fun emitM k = (get_progM : |-- (fn n => set_progM (n@[k] )))
+*}
+
+ML{*
+fun runM_gen bstep stepM =
+let
+fun next_bstep bstep = if bstep <= 0 then bstep else bstep - 1
+fun execM bstep stm =
+if bstep = 0 then returnM [] else
+(getM-- stepM stm : |-- (
+fn (st, SOME next_stm) =>
+execM (next_bstep bstep) next_stm : |–
+(fn results => if bstep <= 0 then returnM []
+else returnM ((st, stm)::results))
+| (st, _) => returnM [(st, stm)]))
+in
+execM bstep
+end
+fun debugM bstep = runM_gen bstep
+fun runM x = runM_gen (~1) x
+}
+ML{
+fun instrs_iexp iexp =
+get_numM – get_nM : |-- (fn (num, k) => (
+case iexp of
+BINOP (opr, ie1, ie2) => get_needM : |-- (fn need =>
+let val nd1 = tb_lookup (num@[0]) need
+val nd2 = tb_lookup (num@[1]) need
+in
+if nd1 >= nd2 then
+(set_numM (num@[0]) |-- instrs_iexp ie1 |–
+set_numM (num@[1]) |-- instrs_iexp ie2 |–
+emitM (MOVE (reg_of (k + 1), (BINOP (opr, reg_of (k + 1), reg_of (k + 2))))))
+else
+(set_numM (num@[1]) |-- instrs_iexp ie2 |–
+set_numM (num@[0]) |-- instrs_iexp ie1 |–
+emitM (MOVE (reg_of (k + 1), (BINOP (opr, reg_of (k + 2), reg_of (k + 1))))))
+end)
+| MEM ie => set_numM (num@[0]) |-- instrs_iexp ie |–
+emitM (MOVE (reg_of (k + 1), MEM (reg_of (k+1))))
+| CONST i => emitM (MOVE (reg_of (k + 1), CONST i))
+) |-- set_numM num |-- set_nM (k + 1) |-- returnM num)
+}
+ML{
+fun max a b = if a>b then a else b
+fun ruse0 iexp =
+((get_numM) – get_needM) : |-- (fn ((num),need) =>
+(case iexp of
+BINOP (opr,ie1,ie2) => ((set_numM (num @[0])|-- ruse0 ie1) –
+(set_numM (num @ [1]) |-- ruse0 ie2)): |–(fn (a,b)=>get_needM : |-- (fn need2 => if (max a b) =1 then (set_needM ((num,2)::need2)|-- returnM 2) else if a<>b then(set_needM ((num,(max a b))::need2)|–returnM (max a b))else(set_needM ((num,(max a b)+1)::need2)|-- returnM ((max a b)+1))))
+(|MEM (ie) => set_needM ((num,1)::need)|–set_numM (num @ [0]) |-- ruse0 ie |-- returnM 1)
+|MEM (ie) => set_numM (num @ [0])|–(ruse0 ie : |-- (fn n => (if n=2 then get_needM: |–(fn need2 => set_needM((num,2)::need2))
+else get_needM: |-- (fn need2 => set_needM ((num,1)::need2)))|–returnM n) )
+| CONST i => set_needM ((num,1):: need)|-- returnM 1
+)
+)
+}
+ML{
+fun ruse e= (ruse0 e) |-- set_numM []
+*}
+
+ML{*
+val c =
+BINOP (DIV, MEM (CONST 2),
+BINOP (MINUS, MEM (CONST 3),
+BINOP (MUL, BINOP (PLUS, MEM (CONST 1), CONST 20), CONST 5)))
+}
+ML{
+val d = (ruse c) (state{num=[],n=0,need=[],prog=[],labels=[]})
+}
+ML{
+val e = ( ruse c|–instrs_iexp c |-- get_progM) (state{num=[],n=0,need=[],prog=[],labels=[]})
+}
+ML{
+val (,state{need,…}) = (state{num=[],n=0,need=[],prog=[],labels=[]}) |> ruse (BINOP (DIV,MEM (BINOP (DIV,CONST 2,CONST 1)),CONST 1))
+}
+ML{
+val v = ((CONST 1))
+val (,staten) = (ruse v|–instrs_iexp v) (state{num=[],n=0,need=[],prog=[],labels=[]})
+*}
+
+ML{*
+exception Bug
+}
+( 1 )
+ML {
+val (_,state
+{need,…}) = (state {num = [],need = [],prog = [],n = 0,labels = []}) |> ruse ( BINOP (DIV, MEM (CONST 2),
+BINOP (MINUS, MEM (CONST 3), BINOP (MUL, BINOP (PLUS, MEM (CONST 1), CONST 20), CONST 5))))
+*}
+
+ML{*
+val ans_need = [([], 2), ([1], 2), ([1, 1], 2), ([1, 1, 1], 1), ([1, 1, 0], 2),
+([1, 1, 0, 1], 1), ([1, 1, 0, 0], 1), ([1, 1, 0, 0, 0], 1), ([1, 0], 1),
+([1, 0, 0], 1), ([0], 1), ([0, 0], 1)]
+val ans_need1 =
+[([1, 1, 1], 1), ([1, 1, 0, 1], 1), ([1, 1, 0, 0, 0], 1), ([1, 1, 0, 0], 1),
+([1, 1, 0], 2), ([1, 1], 2), ([1, 0, 0], 1), ([1, 0], 1), ([1], 2), ([0, 0], 1),
+([0], 1), ([], 2)]
+val it = if need = ans_need orelse need = rev ans_need orelse need = ans_need1 orelse need = rev ans_need1 then true else raise Bug
+*}
+
+(* 2 )
+ML {
+val (_,state
+{need,…}) = (state {num = [],need = [],prog = [],n = 0,labels = []}) |> ruse (
+BINOP (DIV, MEM (BINOP (PLUS , CONST 2,CONST 1)), CONST 1))
+*}
+
+ML{*
+val ans_need = [([0, 0, 0], 1), ([0, 0, 1], 1), ([0, 0], 2), ([0], 2), ([1], 1), ([], 2)]
+val ans_need1 = [([], 2), ([0], 2), ([0, 0], 2), ([0, 0, 0], 1), ([0, 0, 1], 1), ([1], 1)]
+val it = if need = ans_need orelse need = rev ans_need orelse need = ans_need1 orelse need = rev ans_need1 then true else raise Bug
+*}
+
+(* 3 )
+ML {
+val (_,state
+{need,…}) = (state {num = [],need = [],prog = [],n = 0,labels = []}) |> ruse ( BINOP (DIV, MEM (CONST 2),
+BINOP (MINUS, MEM (CONST 3), BINOP (MUL, BINOP (PLUS, MEM (CONST 1), CONST 20), BINOP (PLUS, MEM (CONST 1), CONST 20)))))
+*}
+
+ML{*
+val ans_need = [([], 3), ([0], 1), ([0, 0], 1), ([1], 3), ([1, 0], 1), ([1, 0, 0], 1),
+([1, 1], 3), ([1, 1, 0], 2), ([1, 1, 0, 0], 1), ([1, 1, 0, 0, 0], 1),
+([1, 1, 0, 1], 1), ([1, 1, 1], 2), ([1, 1, 1, 0], 1),
+([1, 1, 1, 0, 0], 1), ([1, 1, 1, 1], 1)]
+val ans_need1 = [([], 3), ([1], 3), ([1, 1], 3), ([1, 1, 1], 2), ([1, 1, 1, 1], 1),
+([1, 1, 1, 0], 1), ([1, 1, 1, 0, 0], 1), ([1, 1, 0], 2),
+([1, 1, 0, 1], 1), ([1, 1, 0, 0], 1), ([1, 1, 0, 0, 0], 1), ([1, 0], 1),
+([1, 0, 0], 1), ([0], 1), ([0, 0], 1)]
+val it = if need = ans_need orelse need = rev ans_need orelse need = ans_need1 orelse need = rev ans_need1 then true else raise Bug
+*}
+
+ML{*
+fun loc_labelM l = (get_labelsM–get_progM) : |-- (fn (n,k)=> set_labelsM ((l,length k)::n))
+}
+ML{
+fun instrs_stmtM stmt =
+
+(set_nM 0 |-- set_numM [] |-- set_needM [] ) |–
+( case stmt of
+(MOVE (MEM ie1, ie2)) =>
+(ruse ie1 |-- instrs_iexp ie1) |–
+(set_numM [] |-- set_needM []) |–
+(ruse ie2 |-- instrs_iexp ie2) |–
+emitM (MOVE (MEM (reg_of 1), (reg_of 2)))
+| (SJUMP (rop, ie1, ie2, l)) =>
+(ruse ie1 |-- instrs_iexp ie1) |–
+(set_numM [] |-- set_needM []) |–
+(ruse ie2 |-- instrs_iexp ie2) |–
+emitM (SJUMP (rop, reg_of 1, reg_of 2, l))
+| (CJUMP (rop, ie1, ie2, t, f)) =>
+(ruse ie1 |-- instrs_iexp ie1) |–
+(set_numM [] |-- set_needM [] ) |–
+(ruse ie2 |-- instrs_iexp ie2) |–
+emitM (CJUMP (rop, reg_of 1, reg_of 2, t, f))
+| (LABEL l) => loc_labelM l
+| stm => emitM stm )
+}
+ML{
+val e = ( ruse c|–instrs_iexp c |-- get_progM) (state{num=[],n=0,need=[],prog=[],labels=[]})
+}
+ML{
+val (_, state {labels, prog, …}) = ((map instrs_stmtM (fst e)) |> listM) (state{num=[],n=0,need=[],prog=[],labels=[]})
+}
+ML{
+fun a1 a d g= case g of CJUMP(z,x,c,v,b) =>if member v (fst(unzip d)) then CJUMP(z,x,c,(RR(tb_lookup v d)),b) else CJUMP(z,x,c,RR a,b)
+fun a2 a d g= case g of CJUMP(z,x,c,v,b) =>if member b (fst(unzip d)) then CJUMP(z,x,c,v,(RR(tb_lookup b d))) else CJUMP(z,x,c,v,RR a)
+}
+ML{
+fun labeling a d = fn k => case k of
+JUMP(m,[n])=> if member n (fst(unzip d)) then JUMP(m, [RR (tb_lookup n d)]) else JUMP(m,[RR a])
+|SJUMP(z,x,c,n) => if member n (fst(unzip d)) then SJUMP (z,x,c,(RR(tb_lookup n d))) else SJUMP(z,x,c,(RR a))
+|CJUMP(z,x,c,v,b) => let
+fun a1 a d g= case g of CJUMP(z,x,c,v,b) =>if member v (fst(unzip d)) then CJUMP(z,x,c,(RR(tb_lookup v d)),b) else CJUMP(z,x,c,RR a,b)
+fun a2 a d g= case g of CJUMP(z,x,c,v,b) =>if member b (fst(unzip d)) then CJUMP(z,x,c,v,(RR(tb_lookup b d))) else CJUMP(z,x,c,v,RR a)
+val m = a1 a d (CJUMP(z,x,c,v,b))
+val l = a2 a d m
+in
+l
+end
+
+              |_ => k
+1
+*}
+
+ML{*
+exception Bug
+
+}
+( 1 )
+ML {
+val c = (ruse ( (MEM (CONST 1)) )|-- instrs_iexp ( (MEM (CONST 1) ))) (state{num=[],n=0-1,need=[],prog=[],labels=[]})
+val init_state = state {num = [],need = [],prog = [],n = 0,labels = []}
+val stmts_sum =
+[LABEL (NL “start”), MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0), MOVE (MEM (CONST 3), CONST 10), LABEL (IL 1),
+SJUMP (LE, MEM (CONST 2), MEM (CONST 3), IL 2), LABEL (IL 3), JUMP (CONST 0, [NL “end”]), LABEL (IL 2),
+MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), MEM (CONST 2))), MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)),
+JUMP (CONST 0, [IL 1])]
+
+val (_,state {labels,prog,…}) = (map instrs_stmtM stmts_sum |> listM) init_state
+
+}
+ML{
+val ans_prog = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 0),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 0), MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)),
+MOVE (TEMP (IT 1), CONST 3), MOVE (TEMP (IT 2), CONST 10),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 1), MEM (TEMP (IT 1))), MOVE (TEMP (IT 2), CONST 3),
+MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+SJUMP (LE, TEMP (IT 1), TEMP (IT 2), IL 2), JUMP (CONST 0, [NL “end”]),
+MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 1),
+MOVE (TEMP (IT 2), MEM (TEMP (IT 2))), MOVE (TEMP (IT 3), CONST 2),
+MOVE (TEMP (IT 3), MEM (TEMP (IT 3))),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 2), MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 1),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [IL 1])]
+
+val it = if prog = ans_prog then true else raise Bug
+*}
+
+ML {*
+val prog_label = map (labeling (length prog +1) labels) prog
+*}
+
+ML{*
+val ans_prog_label = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 0),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 0), MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)),
+MOVE (TEMP (IT 1), CONST 3), MOVE (TEMP (IT 2), CONST 10),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 1), MEM (TEMP (IT 1))), MOVE (TEMP (IT 2), CONST 3),
+MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+SJUMP (LE, TEMP (IT 1), TEMP (IT 2), RR 15), JUMP (CONST 0, [RR 30]),
+MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 1),
+MOVE (TEMP (IT 2), MEM (TEMP (IT 2))), MOVE (TEMP (IT 3), CONST 2),
+MOVE (TEMP (IT 3), MEM (TEMP (IT 3))),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 2), MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 1),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [RR 9])]
+
+val it = if prog_label = ans_prog_label then true else raise Bug
+*}
+
+(* 2 )
+ML {
+val init_state = state {num = [],need = [],prog = [],n = 0,labels = []}
+val stmts_sum = [LABEL (NL “_start”), MOVE (MEM (CONST 1), CONST 20), MOVE (MEM (CONST 2), BINOP (PLUS, CONST 1, BINOP (MUL, MEM (CONST 1), CONST 500))),
+JUMP (CONST 0, [NL "done"])]
+val (,state {labels,prog,…}) = (map instrs_stmtM stmts_sum |> listM) init_state
+}
+ML{
+val ans_prog = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 20),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 1), MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 500),
+MOVE (TEMP (IT 2), BINOP (MUL, TEMP (IT 2), TEMP (IT 3))),
+MOVE (TEMP (IT 3), CONST 1),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 3), TEMP (IT 2))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [NL “_done”])]
+
+val it = if prog = ans_prog then true else raise Bug
+*}
+
+ML {*
+val prog_label = map (labeling (length prog +1) labels) prog
+*}
+
+ML{*
+val ans_prog_label = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 20),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 1), MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 500),
+MOVE (TEMP (IT 2), BINOP (MUL, TEMP (IT 2), TEMP (IT 3))),
+MOVE (TEMP (IT 3), CONST 1),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 3), TEMP (IT 2))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [RR 13])]
+
+val it = if prog_label = ans_prog_label then true else raise Bug
+*}
+
+(* 3 )
+ML {
+val init_state = state {num = [],need = [],prog = [],n = 0,labels = []}
+val stmts_sum =
+[LABEL (NL “_start”),
+MOVE (MEM (CONST 1), BINOP (DIV, MEM (CONST 2), BINOP (MINUS, MEM (CONST 3), BINOP (MUL, BINOP (PLUS, MEM (CONST 1), CONST 20), CONST 5)))),
+JUMP (CONST 0, [NL "done"])]
+val (,state {labels,prog,…}) = (map instrs_stmtM stmts_sum |> listM) init_state
+}
+ML{
+val ans_prog = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 1),
+MOVE (TEMP (IT 2), MEM (TEMP (IT 2))), MOVE (TEMP (IT 3), CONST 20),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (TEMP (IT 3), CONST 5),
+MOVE (TEMP (IT 2), BINOP (MUL, TEMP (IT 2), TEMP (IT 3))),
+MOVE (TEMP (IT 3), CONST 3), MOVE (TEMP (IT 3), MEM (TEMP (IT 3))),
+MOVE (TEMP (IT 2), BINOP (MINUS, TEMP (IT 3), TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 2), MOVE (TEMP (IT 3), MEM (TEMP (IT 3))),
+MOVE (TEMP (IT 2), BINOP (DIV, TEMP (IT 3), TEMP (IT 2))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [NL “_done”])]
+
+val it = if prog = ans_prog then true else raise Bug
+*}
+
+ML {*
+val prog_label = map (labeling (length prog +1) labels) prog
+*}
+
+ML{*
+val ans_prog_label = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 1),
+MOVE (TEMP (IT 2), MEM (TEMP (IT 2))), MOVE (TEMP (IT 3), CONST 20),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (TEMP (IT 3), CONST 5),
+MOVE (TEMP (IT 2), BINOP (MUL, TEMP (IT 2), TEMP (IT 3))),
+MOVE (TEMP (IT 3), CONST 3), MOVE (TEMP (IT 3), MEM (TEMP (IT 3))),
+MOVE (TEMP (IT 2), BINOP (MINUS, TEMP (IT 3), TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 2), MOVE (TEMP (IT 3), MEM (TEMP (IT 3))),
+MOVE (TEMP (IT 2), BINOP (DIV, TEMP (IT 3), TEMP (IT 2))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [RR 16])]
+
+val it = if prog_label = ans_prog_label then true else raise Bug
+*}
+
+(* 4 )
+ML {
+val init_state = state {num = [],need = [],prog = [],n = 0,labels = []}
+val stmts_sum =
+[LABEL (NL “_start”), SJUMP (LT, MEM (CONST 1), CONST 10, IL 1), LABEL (IL 2), SJUMP (GE, MEM (CONST 2), CONST 5, IL 3), LABEL (IL 4),
+MOVE (MEM (CONST 3), CONST 1), LABEL (IL 5), JUMP (CONST 0, [NL "done"]), LABEL (IL 1), JUMP (CONST 0, [IL 2]), LABEL (IL 3),
+MOVE (MEM (CONST 3), CONST 0), JUMP (CONST 0, [IL 5])]
+val (,state {labels,prog,…}) = (map instrs_stmtM stmts_sum |> listM) init_state
+}
+ML{
+val ans_prog = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 10), SJUMP (LT, TEMP (IT 1), TEMP (IT 2), IL 1),
+MOVE (TEMP (IT 1), CONST 2), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 5), SJUMP (GE, TEMP (IT 1), TEMP (IT 2), IL 3),
+MOVE (TEMP (IT 1), CONST 3), MOVE (TEMP (IT 2), CONST 1),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [NL “_done”]),
+JUMP (CONST 0, [IL 2]), MOVE (TEMP (IT 1), CONST 3),
+MOVE (TEMP (IT 2), CONST 0), MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)),
+JUMP (CONST 0, [IL 5])]
+
+val it = if prog = ans_prog then true else raise Bug
+*}
+
+ML {*
+val prog_label = map (labeling (length prog +1) labels) prog
+*}
+
+ML{*
+val ans_prog_label = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 10), SJUMP (LT, TEMP (IT 1), TEMP (IT 2), RR 12),
+MOVE (TEMP (IT 1), CONST 2), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 5), SJUMP (GE, TEMP (IT 1), TEMP (IT 2), RR 13),
+MOVE (TEMP (IT 1), CONST 3), MOVE (TEMP (IT 2), CONST 1),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [RR 18]),
+JUMP (CONST 0, [RR 4]), MOVE (TEMP (IT 1), CONST 3),
+MOVE (TEMP (IT 2), CONST 0), MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)),
+JUMP (CONST 0, [RR 11])]
+
+val it = if prog_label = ans_prog_label then true else raise Bug
+*}
+
+(* 5 )
+ML {
+val init_state = state {num = [],need = [],prog = [],n = 0,labels = []}
+val stmts_sum =
+[LABEL (NL “_start”), SJUMP (LE, MEM (CONST 1), CONST 10, IL 1), LABEL (IL 4), JUMP (CONST 0, [NL "done"]), LABEL (IL 1),
+CJUMP (EQ, CONST 6, CONST 7, IL 2, IL 4), LABEL (IL 2), CJUMP (GT, MEM (CONST 2), CONST 5, IL 3, IL 4), LABEL (IL 3),
+MOVE (MEM (CONST 3), CONST 0), MOVE (MEM (CONST 4), BINOP (DIV, CONST 100, CONST 10)), JUMP (CONST 0, [IL 4])]
+val (,state {labels,prog,…}) = (map instrs_stmtM stmts_sum |> listM) init_state
+}
+ML{
+val ans_prog = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 10), SJUMP (LE, TEMP (IT 1), TEMP (IT 2), IL 1),
+JUMP (CONST 0, [NL “_done”]), MOVE (TEMP (IT 1), CONST 6),
+MOVE (TEMP (IT 2), CONST 7), CJUMP (EQ, TEMP (IT 1), TEMP (IT 2), IL 2, IL 4),
+MOVE (TEMP (IT 1), CONST 2), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 5), CJUMP (GT, TEMP (IT 1), TEMP (IT 2), IL 3, IL 4),
+MOVE (TEMP (IT 1), CONST 3), MOVE (TEMP (IT 2), CONST 0),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 4),
+MOVE (TEMP (IT 2), CONST 100), MOVE (TEMP (IT 3), CONST 10),
+MOVE (TEMP (IT 2), BINOP (DIV, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [IL 4])]
+
+val it = if prog = ans_prog then true else raise Bug
+*}
+
+ML {*
+val prog_label = map (labeling (length prog +1) labels) prog
+*}
+
+ML{*
+val ans_prog_label = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 10), SJUMP (LE, TEMP (IT 1), TEMP (IT 2), RR 5),
+JUMP (CONST 0, [RR 22]), MOVE (TEMP (IT 1), CONST 6),
+MOVE (TEMP (IT 2), CONST 7), CJUMP (EQ, TEMP (IT 1), TEMP (IT 2), RR 8, RR 4),
+MOVE (TEMP (IT 1), CONST 2), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 5), CJUMP (GT, TEMP (IT 1), TEMP (IT 2), RR 12, RR 4),
+MOVE (TEMP (IT 1), CONST 3), MOVE (TEMP (IT 2), CONST 0),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 4),
+MOVE (TEMP (IT 2), CONST 100), MOVE (TEMP (IT 3), CONST 10),
+MOVE (TEMP (IT 2), BINOP (DIV, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [RR 4])]
+
+val it = if prog_label = ans_prog_label then true else raise Bug
+*}
+
+(* 6 )
+ML {
+val init_state = state {num = [],need = [],prog = [],n = 0,labels = []}
+val stmts_sum =
+[LABEL (NL “_start”), MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0), LABEL (IL 1), SJUMP (LE, MEM (CONST 2), CONST 10, IL 2),
+LABEL (IL 3), JUMP (CONST 0, [NL "done"]), LABEL (IL 2), MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), MEM (CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)), JUMP (CONST 0, [IL 1])]
+val (,state {labels,prog,…}) = (map instrs_stmtM stmts_sum |> listM) init_state
+}
+ML{
+val ans_prog = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 0),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 0), MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)),
+MOVE (TEMP (IT 1), CONST 2), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 10), SJUMP (LE, TEMP (IT 1), TEMP (IT 2), IL 2),
+JUMP (CONST 0, [NL “_done”]), MOVE (TEMP (IT 1), CONST 1),
+MOVE (TEMP (IT 2), CONST 1), MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 2), MOVE (TEMP (IT 3), MEM (TEMP (IT 3))),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 2), MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 1),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [IL 1])]
+
+val it = if prog = ans_prog then true else raise Bug
+*}
+
+ML {*
+val prog_label = map (labeling (length prog +1) labels) prog
+*}
+
+ML{*
+val ans_prog_label = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 0),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 0), MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)),
+MOVE (TEMP (IT 1), CONST 2), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 10), SJUMP (LE, TEMP (IT 1), TEMP (IT 2), RR 11),
+JUMP (CONST 0, [RR 26]), MOVE (TEMP (IT 1), CONST 1),
+MOVE (TEMP (IT 2), CONST 1), MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 2), MOVE (TEMP (IT 3), MEM (TEMP (IT 3))),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 2), MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 1),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [RR 6])]
+
+val it = if prog_label = ans_prog_label then true else raise Bug
+*}
+
+(* 7 )
+ML {
+val init_state = state {num = [],need = [],prog = [],n = 0,labels = []}
+val stmts_sum =
+[LABEL (NL “_start”), SJUMP (LT, MEM (CONST 1), CONST 10, IL 2), LABEL (IL 1), LABEL (IL 2), MOVE (MEM (CONST 1), CONST 0), LABEL (IL 3),
+JUMP (CONST 0, [NL "done"])]
+val (,state {labels,prog,…}) = (map instrs_stmtM stmts_sum |> listM) init_state
+}
+ML{
+val ans_prog = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 10), SJUMP (LT, TEMP (IT 1), TEMP (IT 2), IL 2),
+MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 0),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [NL “_done”])]
+
+val it = if prog = ans_prog then true else raise Bug
+*}
+
+ML {*
+val prog_label = map (labeling (length prog +1) labels) prog
+*}
+
+ML{*
+val ans_prog_label = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 10), SJUMP (LT, TEMP (IT 1), TEMP (IT 2), RR 4),
+MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 0),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [RR 9])]
+
+val it = if prog_label = ans_prog_label then true else raise Bug
+*}
+
+(* 8 )
+ML {
+val init_state = state {num = [],need = [],prog = [],n = 0,labels = []}
+val stmts_sum =
+[LABEL (NL “_start”), MOVE (MEM (CONST 1), CONST 0), MOVE (MEM (CONST 2), CONST 0), LABEL (IL 2), SJUMP (NE, MEM (CONST 2), CONST 0, IL 1),
+LABEL (IL 4), JUMP (CONST 0, [NL "done"]), LABEL (IL 1), JUMP (CONST 0, [IL 4]), LABEL (IL 3),
+MOVE (MEM (CONST 1), BINOP (PLUS, MEM (CONST 1), BINOP (MINUS, CONST 0, CONST 2))),
+MOVE (MEM (CONST 2), BINOP (PLUS, MEM (CONST 2), CONST 1)), JUMP (CONST 0, [IL 2])]
+val (,state {labels,prog,…}) = (map instrs_stmtM stmts_sum |> listM) init_state
+}
+ML{
+val ans_prog = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 0),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 0), MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)),
+MOVE (TEMP (IT 1), CONST 2), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 0), SJUMP (NE, TEMP (IT 1), TEMP (IT 2), IL 1),
+JUMP (CONST 0, [NL “_done”]), JUMP (CONST 0, [IL 4]),
+MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 0),
+MOVE (TEMP (IT 3), CONST 2),
+MOVE (TEMP (IT 2), BINOP (MINUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (TEMP (IT 3), CONST 1), MOVE (TEMP (IT 3), MEM (TEMP (IT 3))),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 3), TEMP (IT 2))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 2), MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 1),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [IL 2])]
+
+val it = if prog = ans_prog then true else raise Bug
+*}
+
+ML {*
+val prog_label = map (labeling (length prog +1) labels) prog
+*}
+
+ML{*
+val ans_prog_label = [MOVE (TEMP (IT 1), CONST 1), MOVE (TEMP (IT 2), CONST 0),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 0), MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)),
+MOVE (TEMP (IT 1), CONST 2), MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 0), SJUMP (NE, TEMP (IT 1), TEMP (IT 2), RR 11),
+JUMP (CONST 0, [RR 28]), JUMP (CONST 0, [RR 10]), MOVE (TEMP (IT 1), CONST 1),
+MOVE (TEMP (IT 2), CONST 0), MOVE (TEMP (IT 3), CONST 2),
+MOVE (TEMP (IT 2), BINOP (MINUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (TEMP (IT 3), CONST 1), MOVE (TEMP (IT 3), MEM (TEMP (IT 3))),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 3), TEMP (IT 2))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 2), MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 1),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)), JUMP (CONST 0, [RR 6])]
+
+val it = if prog_label = ans_prog_label then true else raise Bug
+*}
+
+ML{*
+val state_type = “state”
+val vars = [( “regs” , “(int * word) list” ),
+( “mem” , “word list” ),
+( “pc” , “int” ),
+( “prog” , “stm list” )]
+val _ = record_defs [] state_type vars
+}
+ML{
+val inc_pcM = get_pcM : |-- (fn n => set_pcM (n+1))
+}
+ML{
+fun whitch n (x::xs) = if n = 0 then x else whitch (n-1) xs
+}
+ML{
+fun get_regM i = get_regsM : |-- (fn regs => let
+val list = filter (fn (a,b) => a=i) regs
+val return = hd list
+in
+returnM (snd return)
+end)
+
+}
+ML{
+fun set_regM i w = get_regsM : |-- (fn regs => let
+
+                                        val list = if member i (fst (unzip regs)) then
+                                          map (fn (x,y)=> if x=i then (x,w) else (x,y)) regs
+                                        else 
+                                          (regs@[(i,w)])
+                                      in
+                                         set_regsM list
+                                      end)
+1
+2
+3
+4
+5
+6
+7
+}
+ML{
+fun get_mcM c = get_memM : |-- (fn mem => returnM (whitch ( c) mem))
+}
+ML{
+fun set_mcM c w = get_memM: |-- (fn mem => let
+val d = upto 0 (length mem)
+val list = zip d mem
+val list2 = map (fn (x,y) => if x = c then (x,w) else (x,y)) list
+val list3 = snd (unzip list2)
+in
+set_memM list3
+end)
+}
+ML{
+
+}
+ML{
+val N =10
+val c = (upto 1 N ) |> map (fn _ => Word.fromInt 0)
+}
+ML{
+val nextM = (get_pcM – get_progM) : |-- (fn (pc,prog)=> if pc < (length prog) then returnM (SOME (whitch pc prog)) else returnM NONE)
+}
+ML{
+fun wbop0 rop r1 r2 =
+let
+val r1 = Word.toInt r1
+val r2 = Word.toInt r2
+val c = case rop of
+PLUS => r1 + r2
+|MUL => r1 * r2
+|MINUS => r1 - r2
+|OR => if r1 = 0 andalso r2 = 0 then 0 else 1
+|AND => if r1 =1 andalso r2 = 1 then 1 else 0
+
+in c end
+fun wbop rop r1 r2 = Word.fromInt (wbop0 rop r1 r2)
+}
+(EQ | NE | LT | GT | LE | GE | ULT | ULE | UGT | UGE)
+ML{
+fun wrop0 rop r1 r2 =
+let
+val r1 = Word.toInt r1
+val r2 = Word.toInt r2
+val c =case rop of
+EQ => if r1 = r2 then 1 else 0
+|NE => if r1 <> r2 then 1 else 0
+|LT => if r1< r2 then 1 else 0
+|GT => if r1> r2 then 1 else 0
+|LE=> if r1<= r2 then 1 else 0
+|GE=> if r1>=r2 then 1 else 0
+
+in if c = 1 then true else false end
+fun wrop rop r1 r2 = (wrop0 rop r1 r2)
+}
+ML{
+fun stepM instr = inc_pcM |–
+(case instr of
+
+MOVE (MEM (TEMP (IT i)), TEMP (IT j)) =>
+get_regM i – get_regM j : |-- (fn (addr, w) => (set_mcM (Word.toInt addr) w))
+| MOVE (TEMP (IT i), MEM (TEMP (IT j))) =>
+get_regM j : |-- (fn addr => get_mcM (Word.toInt addr) : |-- (fn w => set_regM i w))
+
+| MOVE (TEMP (IT i), CONST c) => set_regM i (Word.fromInt c)
+| MOVE (TEMP (IT t), BINOP (opr, TEMP (IT i), TEMP (IT j))) =>
+(get_regM i – get_regM j) : |-- (fn (wi, wj) => set_regM t (wbop opr wi wj))
+| JUMP (CONST 0, [RR t]) => set_pcM t
+| SJUMP (rop, TEMP (IT i), TEMP (IT j), RR t) =>
+(get_regM i – get_regM j) : |-- (fn (wi, wj) => if wrop rop wi wj then set_pcM t else returnM ())
+| CJUMP (rop, TEMP (IT i), TEMP (IT j), RR t, RR f) =>
+(get_regM i – get_regM j) : |-- (fn (wi, wj) => if wrop rop wi wj then set_pcM t else set_pcM f)
+) |-- nextM
+}
+ML{
+val labels = [(IL 2, 15), (IL 3, 14), (IL 1, 9), (NL “_start” , 0)]: (label * int) list
+val prog =
+[MOVE (TEMP (IT 1), CONST 1),
+MOVE (TEMP (IT 2), CONST 0),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)),
+MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 0),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)),
+MOVE (TEMP (IT 1), CONST 3),
+MOVE (TEMP (IT 2), CONST 10),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)),
+MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 1), MEM (TEMP (IT 1))),
+MOVE (TEMP (IT 2), CONST 3),
+MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+SJUMP (LE, TEMP (IT 1), TEMP (IT 2), IL 2),
+JUMP (CONST 0, [NL “_end” ]),
+MOVE (TEMP (IT 1), CONST 1),
+MOVE (TEMP (IT 2), CONST 1),
+MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 2),
+MOVE (TEMP (IT 3), MEM (TEMP (IT 3))),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)),
+MOVE (TEMP (IT 1), CONST 2),
+MOVE (TEMP (IT 2), CONST 2),
+MOVE (TEMP (IT 2), MEM (TEMP (IT 2))),
+MOVE (TEMP (IT 3), CONST 1),
+MOVE (TEMP (IT 2), BINOP (PLUS, TEMP (IT 2), TEMP (IT 3))),
+MOVE (MEM (TEMP (IT 1)), TEMP (IT 2)),
+JUMP (CONST 0, [IL 1])]
+}
+ML{
+
+val prog = map (labeling (length prog +1) labels) prog
+}
+ML{
+val (_, state {regs, mem, pc, …}) =
+runM stepM (hd prog) (state {pc = 0, prog = prog, regs = [], mem = c})
+}
+ML{
+val var_typ_locs = [( “s” , (Tnum, 1)), ( “i” , (Tnum, 2)), ( “N” , (Tnum, 3))]
+}
+ML{
+fun value_map ty m = if ty = Tnum then (Num (Word.toInt m))else if (Word.toInt m) = 1 then Bool true else Bool false
+
+}
+ML{
+var_typ_locs |> map (fn (vn, (ty, loc)) => (vn, value_map ty (nth mem loc)))
+*}
+
+ML{*
+
+val is_end = one (fn n => n= Delim “;”)
+val is_if = one (fn n => n = Keyword “if”)
+val is_then = one (fn n=> n = Keyword “then”)
+val is_else = one (fn n=> n = Keyword “else”)
+val is_while = one (fn n=> n = Keyword “while”)
+fun is_ident (Ident _) = true
+|is_ident _ = false
+fun is_equ (Delim “=”) = true
+|is_equ _ = false
+fun is_LB (Delim “{”) = true
+|is_LB _ = false
+fun is_RB (Delim “}”) = true
+|is_RB _ = false
+val v = one (is_ident) ([Ident “c”])
+val jump = one (fn n=> true)
+val dou = one (fn n => n = Delim “;”)
+fun peal( Ident x) = x
+val c = jump [“a”]
+val add = one (fn n=> n =Delim"+")
+val sub = one (fn n=> n =Delim"-")
+val mult = one (fn n=> n =Delim"*")
+val chu = one (fn n=> n =Delim"/")
+*}
+
+ML{*
+fun is_lb (Delim “(”) = true
+|is_lb _ = false
+fun is_rb (Delim “)”) = true
+|is_rb _ = false
+fun IFE x = ((((((is_if |-- bexpN --|is_then) – ACMD) --|is_else) --ACMD ) ) >> (fn ((a,b),c)=> Ife (a,b,c))) x
+and IFT x = ((((is_if |-- bexpN --| is_then) – ACMD) ) >> (fn (a,b) => Ift (a,b))) x
+and whilec x = ((((is_while |-- bexpN )-- ACMD) ) >> (fn (a,b)=> While (a,b))) x
+and ASGN x = (((one (is_ident) --| (one (is_equ))) – bexpN) >> (fn ((Ident a),b)=> Asgn (a,b))) x
+and ACMD x = ( IFE || IFT
+|| whilec
+
+        ||FUNU
+        || ASGN
+        || RETURN
+        
+        ||BLOCK
+        || (one (is_LB)) |-- SEQ --| one (is_RB)) x
+1
+2
+3
+4
+5
+6
+(and SEQ x = (((ACMD – (repeat (is_end |-- ACMD))) >> ((fn (e,ops)=> (foldl (fn (e1,e2)=> Seq (e1,e2)) e ops)))
+)|| (ACMD >> (fn e => Seq(e,e) ))) x)
+and SEQ x = (((ACMD – (repeat (is_end |-- ACMD))) >> (fn (e,ops)=> if ops = [] then e else (foldl(fn (e1,e2)=> Seq (e1,e2)) (last ops) (rev(e::(but_last ops)))))) ) x
+and PROG x = ( ( repeat FUND) >> (fn (b) => (Prog b))) x
+and add_ident x =((one(is_ident) – repeat (one (fn n => n= Delim “,”)|–one (is_ident)))) x
+and FUND1 x = ((one(is_ident) – (one (is_lb) |–(( (one (is_rb)|–BLOCK))) ))>> (fn (Ident a,b)=> Fdecl (( a,[]),b))) x
+and FUND2 x = ((one (is_ident) – (one (is_lb) |-- add_ident–(one (is_rb) |-- (BLOCK))))>> (fn (Ident a,((Ident d,b),c)) => Fdecl ((a,(d::(map (peal) b))),c))) x
+and FUND x = (FUND1|| FUND2) x
+and dexp x = (FUNUE || bexp ) x
+and factorN x = ( (one is_lb|-- dexp–| one is_rb)||
+FUNUE||
+( Const_exp)||
+( var_exp)||
+one is_neg |-- factorN>> Neg
+) x
+and termN x = (factorN --(repeat (mult_or_div – factorN))>>
+(fn (e, op_fcts) => foldl (fn ((Delim “*” , e2), e1) => Mult (e1, e2)
+| ((Delim “/” , e2), e1)=> Div (e1, e2)) e op_fcts)) x
+and aexpN x = (termN --(repeat (add_or_minus – termN)) >>
+(fn (e, op_trms) => foldl (fn ((Delim “+” , e2), e1) => Add (e1, e2)
+| ((Delim “-” , e2), e1) => Minus (e1, e2)) e op_trms)) x
+
+and bfactorN x =((( aexpN – cop – aexpN)>>
+(
+fn ((a,Delim “<”),b) => Lt (a,b)
+| ((a,Delim “<=”),b) => Le (a,b)
+| ((a,Delim “>”),b) => Gt (a,b)
+| ((a,Delim “<=”),b) => Ge (a,b)
+| ((a,Delim “==”),b) => Eq (a,b)
+| ((a,Delim “<>”),b) => Neq (a,b)
+))
+
+            || aexpN 
+             || ( (one is_lb |-- bexpN --| one is_rb))
+            || (((one tonot) |-- bfactorN) >> (fn n =>Not n))
+          ) x
+1
+2
+3
+4
+and btermN x = ((bfactorN – repeat ((one(fn n => n =Delim “&&”))-- bfactorN))
+>>(fn (e,ops) => foldl (fn ((Delim “&&”,e2),e1) => And (e1,e2)) e ops ))x
+
+and bexpN x = ((btermN – repeat ((one(fn n => n=Delim “||”))–btermN)) >>
+(fn (e,ops) => foldl (fn ((Delim “||”,e2),e1) => Or (e1,e2)) e ops)) x
+and FUNU1 x = (((one(is_ident) --| (one (is_lb)) --| one (is_rb)))>> (fn (Ident a) => Scall (a,[]))) x
+and FUNU2 x = ((one(is_ident) – (one (is_lb) |-- (shican) --| one (is_rb))) >> (fn (Ident a,(b,c)) => Scall (a,b::c))) x
+and FUNU x = (FUNU1 || FUNU2) x
+and FUNUE1 x = ((one(is_ident) --| (one (is_lb) --| one (is_rb)))>> (fn (Ident a) => Ecall (a,[]))) x
+and FUNUE2 x = ((one(is_ident) – (one (is_lb) |-- (shican) --| one (is_rb))) >> (fn (Ident a,(b,c)) => Ecall (a,b::c))) x
+and FUNUE X = (FUNUE1 || FUNUE2) X
+and shican x = (bexpN – (repeat (one (fn n => n= Delim",") |-- bexpN))) x
+and RETURN x = ((one (fn n=> n = Keyword “return”) – (one(is_lb)|-- bexpN --|one(is_rb)))>> (fn (a,b) => Return (SOME b))) x
+and BLOCK1 x = ((one(is_LB) |–SEQ --| one (is_RB)) >> (fn (a)=> Block ([],a))) x
+and BLOCK2 x = ((one(is_LB) |–(repeat(one(is_ident))–(one(fn n=> n = Delim “.”) |–SEQ --| one (is_RB))))>>(fn (b,c) =>Block ((map (peal) b),c) )) x
+and BLOCK x= (BLOCK1 || BLOCK2) x
+
+}
+ML{
+val c =“s=0;i=1;if (s>2) then s=3 else s=s+1;while (i<3) {s=s+1;i=i+1}”|> String.explode |> lexer |> fst |>SEQ
+val d = "a b h j " |> String.explode |> lexer |> fst
+val e = map (peal) d
+val f =“f(){u v.b=i;k=3}” |> String.explode |> lexer |> fst |> PROG
+val g = “f(1,2,3)”|> String.explode |> lexer |> fst |> bexpN
+val f = “” |> String.explode |> lexer |> fst |> PROG
+}
+ML{
+
+fun FUND1 x = ((one(is_ident) – (one (is_lb) |–(( (one (is_rb)|-- (one(is_LB)|-- SEQ --| one(is_RB))))) ))>> (fn (Ident a,b)=> Fdecl (( a,[]),b))) x
+fun FUND2 x = ((one (is_ident) – (one (is_lb) |-- add_ident–(one (is_rb) |-- (one (is_LB) |-- SEQ --|one (is_RB)))))>> (fn (Ident a,((Ident d,b),c)) => Fdecl ((a,(d::(map (peal) b))),c))) x
+fun FUND x = (FUND1|| FUND2) x
+}
+ML{
+
+val d = [Keyword “if”, Delim “(”, Ident “s”, Delim “>”,
+Number 2, Delim “)”, Keyword “then”, Ident “s”, Delim “=”, Number 3]
+val e = “f(x,y){ u v .u = x + 1; v = u + y;{u v . u= v+1};k = u * v - x;return (F(3,4));w = k * 20 } main () {f(1,2); w = f(9, f(10, 8)); return (2 * w) }”|> String.explode |> lexer |> fst |> PROG
+
+}
+ML{
+val f = " {B C .u=1}"|> String.explode |> lexer |> fst|> BLOCK2
+val f = “main(){ k=1;return ((k)+5)}”|> String.explode |> lexer |> fst |> SEQ
+}
+ML{
+val c= "not 2+true " |> String.explode |>lexer |> fst
+}
+ML{
+(main () { k = gcd (24, 18); return (gcd (24, 18) + 5)})
+val C = “gcd(x,y){if (x > y) then return (gcd ((x - y), y)) else if (x < y) then return (gcd (x, y - x)) else return (x)}”|> String.explode |> lexer |> fst |> FUND
+*}
+
+ML{*
+val v = (((ACMD – (repeat (is_end |-- ACMD)))))
+val c = "gcd(x,y){if (x > y) then return (gcd ((x - y), y)) else if (x < y) then return (gcd (x, y - x)) else return (x)} main(){ k=1+gcd (24,18);m=5;return ((k)+5)} "|> String.explode |> lexer |> fst |>PROG
+*}
+
+ML{*
+val state_type = “state”
+val vars =
+[( “gvars” , “(string * value) list” ),
+( “stack” , “(string * value) list list” ),
+( “rval” , “value” ),
+( “funs” , “(string * (string list * (state -> value * state))) list” )]
+val _ = record_defs [] state_type vars
+
+}
+ML{
+val c = (state{gvars=[],stack=[[]],rval=Noval,funs=[]})
+fun delete n [] = []
+|delete n (x::xs) = if n = 1 then xs
+else delete (n-1) xs
+val c = delete 3 [1,2,3,4,5]
+*}
+
+ML{*
+
+(* Arithmetic Expression )
+fun E (Const i) = returnM (Num i)
+| E (Var v) = ( get_stackM : |-- (fn (n::m) => (returnM (tb_lookup v n))))
+||(get_gvarsM) : |-- (fn k => (returnM (tb_lookup v ( k))))
+| E (Add (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Num (i1 + i2))
+| E (Minus (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Num (i1 - i2))
+| E (Mult (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Num (i1 * i2))
+| E (Div (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Num (i1 div i2))
+| E (Neg e) = E e >> (fn (Num i) => Num (~i))
+( Boolean Expression )
+| E True = returnM (Bool true)
+| E False = returnM (Bool false)
+| E (Lt (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 < i2))
+| E (Le (e1, e2)) = (E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 < i2))
+| E (Gt (e1, e2)) =( E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 > i2))
+| E (Ge (e1, e2)) =( E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 >= i2))
+| E (Eq (e1, e2)) = (E e1 – E e2) >> (fn (Num i1, Num i2) => Bool (i1 = i2))
+| E (Neq (e1, e2)) =( E e1-- E e2) >> (fn (Num i1, Num i2) => Bool (i1 <> i2))
+| E (Not e) = E e >> (fn (Bool b) => Bool (not b))
+| E (And (e1, e2)) =( E e1-- E e2) >> (fn (Bool b1, Bool b2) => Bool (b1 andalso b2))
+| E (Or (e1, e2)) =( E e1-- E e2) >> (fn (Bool b1, Bool b2) => Bool (b1 orelse b2))
+(yuju Expression)
+| E (Ift (e1,e2)) = E e1 : |-- (fn n => if n = Bool true then E e2 else returnM Noval)
+| E (Ife (e1,e2,e3)) = E e1 : |-- ( fn n => if n = (Bool true) then E e2 else E e3)
+| E (While (e1,e2)) = (E e1 ) : |-- (fn (p1) => if p1 = (Bool false) then( returnM Noval) else E e2 |–(E (While (e1,e2))))
+(| E (Asgn (e1,e2)) =(get_stackM --( E e2)) : |-- (fn (store,n)=> if not (member e1 (fst (unzip store))) then setM ((e1,n)::store) else
+setM (map ( fn (a,b) => if a = e1 then (a,n) else (a,b)) store ) )|–returnM Noval*)
+|E (Seq (e1,e2)) = E e1 |-- E e2 |–returnM Noval
+(* more *)
+|E (Fdecl ((a,xs),b)) = ( get_funsM): |-- (fn (m) => (set_funsM ( [(a,(xs,E b))] @ m) |-- returnM Noval ))
+|E (Block (xs,b)) = get_stackM : |-- (fn (n::m) => set_stackM (((map (fn x => (x,Noval)) xs) @n)::m)
+|-- E b
+|-- (get_stackM : |–(fn (k::ks)=> set_stackM ((delete (length xs) k ) :: ks)))
+|-- returnM Noval)
+|E (Asgn (e1,e2)) = (E e2 – (get_gvarsM–get_stackM)): |-- (fn (a,(b,(c::xc))) =>
+if ((filter (fn n => (fst n) = e1) c) <> [])
+then set_stackM ((map (fn n=> if ((fst n) = e1) then (e1,a) else n) c) :: xc)
+else
+(if ((filter (fn n => (fst n) = e1) b) <> [])
+then set_gvarsM (map (fn n=> if ((fst n) <> e1) then (n)else (e1,a)) b)
+else set_gvarsM ((e1,a)::b))) |-- (returnM Noval)
+
+|E (Return (NONE)) = (set_rvalM Noval) |-- (returnM Noval)
+|E (Return (SOME e)) = (E e): |-- (fn n => (set_rvalM n) |-- (returnM Noval))
+(|E (Prog []) = returnM Noval
+|E (Prog [x]) = E x |-- (get_funsM : |-- (fn n => snd(snd(hd n))))
+|E (Prog (x::xs)) = (E x) |-- (E (Prog xs))|–(returnM Noval))
+|E (Prog []) = returnM Noval
+|E (Prog xs) = D xs |-- (get_funsM : |-- (fn n => snd (snd (hd n)))) |-- returnM Noval
+
+|E (Scall (e1,e2)) = ((get_funsM – D e2)–get_stackM) : |-- (fn ((m,n),v) => set_stackM ([zip (fst(tb_lookup e1 m)) n] @ v)|-- snd(tb_lookup e1 m)|–(get_stackM : |-- (fn (k::ks)=> set_stackM ks))|–returnM Noval )
+|E (Ecall (e1,e2)) = ((get_funsM – D e2)–get_stackM) : |-- (fn ((m,n),v) => set_stackM ([zip (fst(tb_lookup e1 m)) n] @ v)|-- snd(tb_lookup e1 m)|–(get_stackM : |-- (fn (k::ks)=> set_stackM ks))|–get_rvalM : |–(fn n => returnM n) )
+and D xs = (map (fn n => E n ) xs) |> listM
+
+}
+ML{
+val C = (“gcd(x,y){if (x > y) then return (gcd ((x - y), y)) else if (x < y) then return (gcd (x, y - x)) else return (x)}”|> String.explode |> lexer |> fst |> FUND|>fst|>E) (state{gvars=[],stack=[[]],rval=Noval,funs=[]})
+}
+ML{
+val v =("gcd(x,y){if (x > y) then return (gcd ((x - y), y)) else if (x < y) then return (gcd (x, y - x)) else return (x)} main(){ k=gcd (24,18);m=5;return ((k)+5)} "|> String.explode |> lexer |> fst |>PROG |>fst |> E) (state{gvars=[],stack=[[]],rval=Noval,funs=[]})
+*}
+
+ML{*
+val v = ((Block ([“a”,“b”], Seq (Asgn (“w”, Const 3),
+Seq (Asgn (“w”, Const 5),
+Return (SOME (Mult (Const 2, Var “w”))))))) |> E) (state{gvars=[],stack=[[]],rval=Noval,funs=[]})
+}
+ML{
+val x = ((Var “v”) |> E) (state{gvars=[(“v”,Num 1)],stack=[[(“x”,Num 1)]],rval=Noval,funs=[]})
+val d = ((Asgn (“w”, Const 5)) |> E )(state{gvars=[(“w”,Num 1)],stack=[[]],rval=Noval,funs=[]})
+val f = (Return (SOME (Mult (Const 2, Var “w”))) |> E ) (state{gvars=[(“w”,Num 1)],stack=[[(“x”,Num 1)]],rval=Noval,funs=[]})
+}
+ML{
+val d = ("main(){k=5;m=5;return (k+5)} "|> String.explode |> lexer |> fst |>PROG |>fst |> E) (state{gvars=[],stack=[[]],rval=Noval,funs=[]})
+}
+ML{
+val g = (("K=7 "|> String.explode |> lexer |> fst |>SEQ |>fst) |> E ) (state{gvars=[(“k”,Num 1)],stack=[[]],rval=Noval,funs=[]})
+val d = (("K=7 "|> String.explode |> lexer |> fst |>SEQ |>fst))
+val f = ((Asgn (“k”, Const 7)) |> E) (state{gvars=[(“k”,Num 1)],stack=[[]],rval=Noval,funs=[]})
+val d = ((Asgn (“w”, Const 5)) |> E ) (state{gvars=[(“w”,Num 1)],stack=[[]],rval=Noval,funs=[]})
+val h = (“f(x,y) {u v.x=5;y=7;u=x+y;return (u)} main () { k=f(2,3);return ((k)+5)}”|> String.explode |> lexer |> fst |> PROG |> fst |> E) (state{gvars=[],stack=[[]],rval=Noval,funs=[]})
+}
+ML{
+val e = (“f(x,y){ u v .u = x + 1; v = u + y;{u v . u=1;v=u+1};k = u * v - x;return (k+u);w = k * 20 } main () {f(1,2); w = f(9, f(10, 8)); return (2 * w) }”|> String.explode |> lexer |> fst |> PROG|>fst|>E) (state{gvars=[],stack=[[]],rval=Noval,funs=[]})
+}
+ML{
+val f = (“gcd (x, y) {if (x > y) then return (gcd ((x - y), y)) else if (x < y) then return (gcd (x, y - x)) else return (x) } main () { k = gcd (24, 18);if (gcd (24,18)< (21)) then m=24 else m=1;return (gcd (24, 18) + 5) }”|> String.explode |> lexer |> fst |> PROG|>fst |>E) (state{gvars=[],stack=[[]],rval=Noval,funs=[]})
+*}
+
+ML{*
+datatype pelm = NPE of string | IE of int
+}
+ML{
+val state_type = “tstate”
+val vars = [ ( “curvar” , “int” ),
+( “eqns” , “((expint) * (TETE)) list " ),
+( “step” , “exp” ),
+(“seeking”,“int”),
+(“num”,“int”),
+(“funlist”,”(string * TE ) list"),
+(“globalvars”,"(string * TE) list"),
+(“stack”,"((pelm list) * ((string * TE) list))list"),
+(“curid”,“pelm list”),
+(“id”,"(int)"),
+(“var”,"(string*TE)list")]
+val _ = record_defs [] state_type vars
+}
+ML{
+exception Newtypeerror of ((TE * TE) * (exp * int))😭*used to output a wrong information *)
+}
+ML{
+fun chaseM (t as Tvar _) = getM : |-- (fn tenv =>
+if (tb_defined t tenv) then chaseM (tb_lookup t tenv) else returnM t)
+| chaseM t = returnM t
+}
+ML{
+
+}
+ML{
+fun unifyM ((t, u), step) = if t = u then returnM () else (
+getM : |-- (fn tenv =>
+case (t, u) of
+(Tvar _, u) => setM ((t, u)::tenv)
+| (t, Tvar _) => setM ((u, t)::tenv)
+| (Tfun (targs, tr), Tfun (targs’, tr’)) =>
+((zip (targs@[tr]) (targs’@[tr’])) |>
+map (fn (t, u) => chaseM t – chaseM u : |–
+(fn (t’, u’) => unifyM ((t’, u’), step))) |> listM) |–
+returnM ()
+| _ => raise Newtypeerror ((t, u), step)
+))
+}
+ML{
+fun preM e =( get_numM: |-- (fn i => set_numM (i+1)) |-- set_stepM e)
+}
+ML{
+fun eqnM ((e1,e2),(v,i)) =( get_eqnsM) : |-- (fn (eqns) => set_eqnsM (((v,i),(e1,e2))::eqns))
+}
+ML{
+fun tb_defined v vars = if member v (fst (unzip vars)) then true else false
+val c = tb_defined 3 [(1,2),(2,3),(3,4)]
+}
+ML{
+fun tb_lookup v vars = snd(hd(filter(fn n =>(fst n) = v ) vars ))
+val c = tb_lookup 3 [(3,4),(2,8)]
+}
+ML{
+fun make_gvarM ( v) = (get_globalvarsM-- get_curvarM): |-- (fn (a,i) =>if tb_defined v a then
+returnM (tb_lookup v a) else (set_globalvarsM ((v,Tvar i)::a)|-- set_curvarM (i+1))|-- returnM (Tvar i))
+}
+ML{
+fun vartM v a [] = (get_globalvarsM-- get_curvarM): |-- (fn (a,i) =>if tb_defined v a then
+returnM (tb_lookup v a) else (set_globalvarsM ((v,Tvar i)::a)|-- set_curvarM (i+1))|-- returnM (Tvar i))
+|vartM v [a] b = if tb_defined v (tb_lookup [a] b) then returnM (tb_lookup v (tb_lookup [a] b))
+else make_gvarM v
+| vartM v m n = ( (if (tb_defined v(tb_lookup m n)) then returnM (tb_lookup v (tb_lookup m n)) else (vartM v (tl m) n)))
+}
+ML{
+fun varM v = (get_curidM – get_stackM) : |-- (fn (c,d) => vartM v c d)
+*}
+
+ML{*
+fun qutou (Tfun (xs,x)) = xs
+fun qutou2 (Tfun (xs,s)) = s
+
+}
+ML{
+
+fun E e =
+preM e |–(get_stepM–get_numM) : |–(fn (step,num) =>
+case e of
+Const i => returnM Tnum
+| Var v => varM v
+| Add (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tnum)
+| Minus (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tnum)
+| Mult (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tnum)
+| Div (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tnum)
+| Neg e => E e : |-- (fn t => eqnM ((t,Tnum),(step,num)) |-- returnM Tnum)
+| True => returnM Tbool
+| False => returnM Tbool
+| Lt (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Le (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Gt (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Ge (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Eq (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Neq (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tnum),(step,num)) |-- eqnM ((t2,Tnum),(step,num)) |-- returnM Tbool)
+| Not e => E e : |-- (fn t => eqnM ((t,Tbool),(step,num))|-- returnM Tbool)
+| And (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tbool),(step,num)) |-- eqnM ((t2 , Tbool),(step,num)) |-- returnM Tbool)
+| Or (e1,e2) => E e1 – E e2 : |–(fn (t1,t2) =>
+eqnM ((t1, Tbool),(step,num)) |-- eqnM ((t2 , Tbool),(step,num)) |-- returnM Tbool)
+|Ift (e1,e2) =>(( E e1) : |-- (fn (t1) =>
+eqnM ((t1, Tbool),(step,num)) |-- returnM ( Tvar ~1)))
+|Ife (e1,e2,e3) => ((E e1) : |-- (fn (t1) => eqnM ((t1,Tbool),(step,num)) |-- returnM (Tvar ~1)))
+|While (e1,e2) => ((E e1 ) : |-- (fn (t1) => eqnM ((t1,Tbool),(step,num)) |-- returnM (Tvar ~1)))
+
+|Seq (e1,e2) => (E e1 |-- E e2)  
+ 
+| (Prog [x]) =>E x |-- returnM Noty
+| (Prog (x::xs)) =>E x |-- E (Prog xs) |-- returnM Noty
+|(Fdecl ((a,xs),b)) => set_curidM ([NPE a]) |-- (set_varM []) |--((map (fn n => get_curvarM : |-- (fn i => get_varM: |-- (fn m => set_varM ((n,Tvar i)::m)|-- set_curvarM (i+1)))) xs)|>listM) 
+                      |-- ((get_varM-- get_stackM): |-- (fn (v,c) => set_stackM (([NPE a],v) :: c)))
+                      |--(((get_varM -- get_funlistM)--get_curvarM) : |-- (fn ((q,w),i) => set_funlistM ((a,(Tfun (snd(unzip q),Tvar i))) ::w)))
+                      |-- get_curvarM : |-- (fn i => set_curvarM (i+1))
+                      |-- set_varM [] |--E b |--
+                       set_idM 0
+                      |-- returnM Noty
+1
+2
+3
+4
+5
+6
+7
+8
+9
+10
+11
+| (Block (xs,e)) => ((get_idM – get_curidM) : |-- (fn (i,id) => set_curidM ((IE (i))::id)))
+|-- set_varM []
+|-- ((map (fn n => get_curvarM : |-- (fn i => get_varM: |-- (fn m => set_varM ((n,Tvar i)::m)|-- set_curvarM (i+1)))) xs)|>listM)
+|–((get_stackM – get_varM)–get_curidM) : |-- (fn
+((st,va),id) => set_stackM (st @ [(id,va)] ))
+|-- get_curvarM : |-- (fn i => set_curvarM (i+1))
+|-- set_varM []
+|-- E e
+|-- get_curidM : |-- (fn ([IE i,a]) => set_idM (i+1)
+|(id::ids) => set_curidM ids)
+|-- get_curidM : |-- (fn (((IE i)::xs))=> set_idM (i+1)
+| [a] => get_idM : |-- (fn i => set_idM (i)))
+|-- returnM Noty
+| (Asgn (a,e)) => (((E e – varM a)) : |-- (fn ((m,n)) => eqnM (((m,n),(step,num)))))
+|-- returnM Noty
+| Return NONE => (get_funlistM : |-- (fn ((a,(Tfun (xs,x))):: ys) => eqnM ((x,Noty),(step,num))))
+|-- returnM Noty
+| Return (SOME e) => (E e – get_funlistM) : |-- (fn (va,(a,(Tfun (xs,x)))::ys ) => eqnM ((x,va),(step,num)))
+|–returnM (Noty)
+| Scall (a,xs) => ((get_funlistM-- ((map E xs)|>listM)) : |–
+(fn (list,va) => (map (fn n => eqnM (n,(step,num))) (zip va (qutou (tb_lookup a list))))|>listM))
+|-- returnM Noty
+| Ecall (a,xs) => ((get_funlistM-- ((map E xs)|>listM)) : |–
+(fn (list,va) => ((map (fn n => eqnM (n,(step,num))) (zip va (qutou (tb_lookup a list))))|>listM)))
+|–(get_funlistM : |-- (fn list =>returnM (qutou2(tb_lookup a list))))
+)
+*}
+
+ML{*
+fun solve eqns =
+(eqns |> map (fn (v,(t, u)) => (((chaseM t)-- (chaseM u)) ) : |–(fn (m,n) => unifyM ((m,n),v))) |> listM) [] |> snd
+}
+ML{
+fun typing source =
+let
+val (result_T, tstate {globalvars,stack,funlist, eqns, …}) =
+(source |> tokens_of |> PROG |> fst |> E)
+(tstate { eqns = [], curvar = 0,step=Const 0,num=0,seeking=0,id=(0),stack=[([],[])],globalvars=[],funlist=[],curid=[],var=[]})
+val tenv = solve eqns
+val result_type = chaseM result_T tenv |> fst
+val types = globalvars |> map (fn (v, vt) => (v, chaseM vt tenv |> fst))
+
+val type2 = stack |> map (fn (a, (xs))=> (a, (xs|> map (fn (v, vt) => (v, chaseM vt tenv |> fst)))))
+val type3 = funlist |> map (fn( a,Tfun (xs,x))=> (a,Tfun (((xs|> map (fn ( vt) => ( chaseM vt tenv |> fst)))),(chaseM x tenv |> fst))))
+in
+(result_type, types,type2,type3)
+end
+
+}
+ML{
+val f =typing " f(x,y) {u v. u = x + 1; v = u + y;{w v. v = x + y; w = v + u; u = 10 + w}; k = u + v - x; return (k + u); w = k + 20 } main() { f(1, 2); w = f(9, f(10, 8)); return (2 * w) } "
+*}
+
+ML{*
+val c = (“gcd(x,y){if (x > y) then return (gcd ((x - y), y)) else if (x < y) then return (gcd (x, y - x)) else return (x)} main(){ k=gcd (24,18);m=5;return ((k)+5)} "
+|> String.explode |> lexer |> fst |>PROG|>fst )
+}
+ML{
+val f = ((Fdecl ((“gcd”, [“x”, “y”]),
+Block ([], Ife (Gt (Var “x”, Var “y”), Return (SOME (Ecall (“gcd”, [Minus (Var “x”, Var “y”), Var “y”]))),
+Ife (Lt (Var “x”, Var “y”), Return (SOME (Ecall (“gcd”, [Var “x”, Minus (Var “y”, Var “x”)]))),
+Return (SOME (Var “x”)))))))|>E)(tstate { eqns = [], curvar = 0,step=Const 0,num=0,seeking=0,id=(~1),stack=[],globalvars=[],funlist=[],curid=[],var=[]})
+}
+ML{
+val n = ((Asgn(“w”, Ecall (“gcd”, [Const 24, Const 18])))|>E) (tstate {curid = [IE 0, NPE “gcd”], curvar = 4, eqns =
+[((Ife (Gt (Var “x”, Var “y”), Return (SOME (Ecall (“gcd”, [Minus (Var “x”, Var “y”), Var “y”]))),
+Ife (Lt (Var “x”, Var “y”), Return (SOME (Ecall (“gcd”, [Var “x”, Minus (Var “y”, Var “x”)]))),
+Return (SOME (Var “x”)))),
+3),
+(Tbool, Tbool)),
+((Gt (Var “x”, Var “y”), 4), (Tvar 1, Tnum)), ((Gt (Var “x”, Var “y”), 4), (Tvar 0, Tnum))],
+funlist = [(“gcd”, Tfun ([Tvar 1, Tvar 0], Tvar 2))], globalvars = [(“w”,Tnum)], id = ~1, num = 6, seeking = 0, stack =
+[([IE 0, NPE “gcd”], []), ([NPE “gcd”], [(“y”, Tvar 1), (“x”, Tvar 0)]),([],[])], step = Var “y”, var = []})
+}
+ML{
+val v =((Fdecl ((“main”, []),
+Block ([], Seq (Asgn (“k”, Ecall (“gcd”, [Const 24, Const 18])),
+Seq (Asgn (“m”, Const 5), Return (SOME (Add (Var “k”, Const 5))))))))|>E) (tstate {curid = [IE 0, NPE “gcd”], curvar = 4, eqns =
+[((Ife (Gt (Var “x”, Var “y”), Return (SOME (Ecall (“gcd”, [Minus (Var “x”, Var “y”), Var “y”]))),
+Ife (Lt (Var “x”, Var “y”), Return (SOME (Ecall (“gcd”, [Var “x”, Minus (Var “y”, Var “x”)]))),
+Return (SOME (Var “x”)))),
+3),
+(Tbool, Tbool)),
+((Gt (Var “x”, Var “y”), 4), (Tvar 1, Tnum)), ((Gt (Var “x”, Var “y”), 4), (Tvar 0, Tnum))],
+funlist = [(“gcd”, Tfun ([Tvar 1, Tvar 0], Tvar 2))], globalvars = [], id = ~1, num = 6, seeking = 0, stack =
+[([IE 0, NPE “gcd”], []), ([NPE “gcd”], [(“y”, Tvar 1), (“x”, Tvar 0)]),([],[])], step = Var “y”, var = []})
+}
+ML{
+val v = typing(” f(x,y) {u v. u = x + 1; v = u + y;{w v. v = x + y; w = v + u; u = 10 + w}; k = u + v - x; return (k + u); w = k + 20 } main() { f(1, 2); w = f(9, f(10, 8)); return (2 * w) } ")
+}
+ML{
+val d = typing("gcd(x,y){if (x > y) then return (gcd ((x - y), y)) else if (x<y ) then return (gcd (x, y - x)) else return (x)} main(){ k=gcd (24,18);m=5;return ((k)+5)} ")
+}
+ML{
+val f = typing “main(){s=0;i=0;n=9; while (s) {s=s+i;i=i+1}}”
+}
+ML{
+val d = typing “main(){s=0;i=0;if (s)then {s=s+1}}”
+*}
+
+end
+————————————————
+
+                            版权声明：本文为博主原创文章，遵循 CC 4.0 BY-SA 版权协议，转载请附上原文出处链接和本声明。
+                        
+原文链接：https://blog.csdn.net/weixin_44120469/article/details/113427692
